@@ -136,6 +136,8 @@ let placedMarkers = [], selectedPic = null, drawMode = false, drawFeature = null
 let eraserMode = false, drawnLines = [], eraserDrag = false;
 let drawColor = '#000000';
 let drawWidth = 5;
+let drawPointerId = null;
+let eraserPointerId = null;
 
 // Список изображений из папки pic/ — при добавлении новых файлов добавьте их сюда
 const PIC_FILES = ['et_preview_url (3) (фон удален).png', 'et_preview_url (4) (фон удален).png'];
@@ -589,12 +591,14 @@ function updateAllPicMarkers(event) {
         onPointerDown: (_, event) => {
             if (eraserMode) {
                 if (!event?.coordinates) return;
+                eraserPointerId = event.pointerId;
                 eraserDrag = true;
                 eraseAt(event.coordinates);
                 return;
             }
             if (!drawMode || !event?.coordinates || drawing) return;
             drawing = true;
+            drawPointerId = event.pointerId;
             drawFeature = null;
             lineCoords = [];
             lastDrawScreen = null;
@@ -602,10 +606,10 @@ function updateAllPicMarkers(event) {
         },
         onPointerMove: (_, event) => {
             if (eraserMode) {
-                if (eraserDrag && event?.coordinates) eraseAt(event.coordinates);
+                if (eraserDrag && event?.coordinates && event.pointerId === eraserPointerId) eraseAt(event.coordinates);
                 return;
             }
-            if (!drawMode || !drawing || !event?.coordinates) return;
+            if (!drawMode || !drawing || !event?.coordinates || event.pointerId !== drawPointerId) return;
             addDrawPoint(event.coordinates, event.screenCoordinates);
         },
         onPointerUp: () => {
@@ -614,6 +618,8 @@ function updateAllPicMarkers(event) {
             drawFeature = null;
             lineCoords = [];
             eraserDrag = false;
+            drawPointerId = null;
+            eraserPointerId = null;
         },
         onPointerCancel: () => {
             if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: lineCoords.slice() });
@@ -621,6 +627,8 @@ function updateAllPicMarkers(event) {
             drawFeature = null;
             lineCoords = [];
             eraserDrag = false;
+            drawPointerId = null;
+            eraserPointerId = null;
         }
     }));
 
