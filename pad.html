@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+        html, body { height:100%; width:100%; overflow:hidden; background:#000; }
+        #map { position:absolute; inset:0; z-index:1; }
+        [class*="-controls-pane"], [class*="-gotoymaps"], [class*="-gototaxi"], [class*="-map-copyrights-promo"],
+        [class*="-copyrights-pane"], [class*="-copyright"], [class*="-logo-wrap"], [class*="-powered"], [class*="-watermark"],
+        .ymaps3--controls_bottom.ymaps3--controls_left { display:none !important; }
+        .fab {
+            position:fixed; z-index:9005; width:52px; height:52px; border-radius:50%; border:0.5px solid rgba(255,255,255,0.12);
+            background:rgba(15,15,15,0.75); color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;
+            box-shadow:0 8px 32px rgba(0,0,0,0.3); touch-action:manipulation;
+        }
+        .fab:active { transform:scale(0.92); }
+        .fab.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
+        #drawBtn { top:calc(12px + env(safe-area-inset-top)); left:12px; }
+        #eraserBtn { top:calc(12px + env(safe-area-inset-top)); left:76px; }
+        #addPicBtn { top:calc(12px + env(safe-area-inset-top)); left:140px; }
+        #locateBtn { top:calc(12px + env(safe-area-inset-top)); right:12px; }
+        #locateBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
+        #picPanel {
+            position:fixed; top:calc(76px + env(safe-area-inset-top)); left:12px; z-index:9005;
+            background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.12); border-radius:16px;
+            padding:10px; max-width:calc(100vw - 24px); max-height:50vh; overflow-y:auto; display:none;
+            box-shadow:0 20px 60px rgba(0,0,0,0.4);
+        }
+        #picPanel.visible { display:block; }
+        #colorPanel {
+            position:fixed; top:calc(76px + env(safe-area-inset-top)); left:12px;
+            z-index:9005; display:none; flex-direction:row; gap:10px;
+            background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.12); border-radius:100px;
+            padding:8px 14px; box-shadow:0 20px 60px rgba(0,0,0,0.4);
+        }
+        #colorPanel.visible { display:flex; }
+        #colorRow { display:flex; flex-direction:row; gap:10px; }
+        #widthSlider {
+            position:fixed; top:calc(180px + env(safe-area-inset-top)); left:12px;
+            z-index:9005; display:none; width:8px; height:140px; margin:0;
+            -webkit-appearance:none; appearance:none; background:rgba(255,255,255,0.2);
+            border-radius:4px; outline:none; touch-action:none;
+            writing-mode:vertical-lr; direction:rtl;
+        }
+        #widthSlider.visible { display:block; }
+        #widthSlider::-webkit-slider-thumb {
+            -webkit-appearance:none; appearance:none; width:22px; height:22px; border-radius:50%;
+            background:#fff; border:2px solid rgba(255,255,255,0.6); cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.4);
+        }
+        #widthSlider::-moz-range-thumb {
+            width:22px; height:22px; border-radius:50%; background:#fff; cursor:pointer;
+        }
+        .color-btn {
+            width:34px; height:34px; border-radius:50%; border:2px solid rgba(255,255,255,0.55); cursor:pointer;
+            touch-action:manipulation; flex-shrink:0;
+        }
+        .color-btn.active { border-color:#30D158; box-shadow:0 0 0 3px rgba(48,209,88,0.4); }
+        .color-btn:active { transform:scale(0.9); }
+        #picGrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+        .pic-item {
+            display:flex; align-items:center; justify-content:center; padding:6px; border-radius:10px;
+            background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); cursor:pointer;
+        }
+        .pic-item img { max-width:80px; max-height:60px; object-fit:contain; display:block; }
+        .pic-item.active { border-color:#30D158; background:rgba(48,209,88,0.2); }
+        .pic-item.hidden { display:none; }
+        #loading {
+            position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; display:flex; align-items:center; justify-content:center;
+        }
+        #loading.hidden { opacity:0; pointer-events:none; transition:opacity 0.6s; }
+        .spinner { width:40px; height:40px; border:3px solid rgba(255,255,255,0.15); border-top-color:#30D158; border-radius:50%; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .place-hint {
+            position:fixed; top:calc(76px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:9005;
+            background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.25); color:#fff; font-size:13px; font-weight:600;
+            padding:8px 16px; border-radius:100px; display:none; pointer-events:none;
+        }
+        .place-hint.visible { display:block; }
+        .pic-marker { max-width:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none; }
+        .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+        .pic-marker.selected .rot-wrap { outline:3px solid #30D158; outline-offset:2px; border-radius:50%; }
+        .rot-handle {
+            position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) translateY(-76px);
+            width:38px; height:38px; border-radius:50%; display:none; align-items:center; justify-content:center;
+            background:rgba(15,15,15,0.85); border:0.5px solid rgba(255,255,255,0.25); color:#fff;
+            cursor:grab; touch-action:none; z-index:2;
+        }
+        .pic-marker.selected .rot-handle { display:flex; }
+        .del-handle {
+            position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) translateY(76px);
+            width:38px; height:38px; border-radius:50%; display:none; align-items:center; justify-content:center;
+            background:rgba(255,59,48,0.9); border:0.5px solid rgba(255,255,255,0.3); color:#fff;
+            cursor:pointer; touch-action:manipulation; z-index:2;
+        }
+        .pic-marker.selected .del-handle { display:flex; }
+        .del-handle:active { transform:translate(-50%,-50%) translateY(76px) scale(0.9); }
+    </style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div></div>
+<div id="map"></div>
+<button id="addPicBtn" class="fab">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M3 6h18v2.5H3V6zm0 4.75h18v2.5H3v-2.5zM3 15.5h18V18H3v-2.5z"/></svg>
+</button>
+<button id="drawBtn" class="fab">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+</button>
+<button id="eraserBtn" class="fab">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M15.14 3c-.51 0-1.02.2-1.41.59L2.59 14.73c-.78.78-.78 2.05 0 2.83l3.85 3.85c.78.78 2.05.78 2.83 0l11.14-11.14c.39-.39.59-.9.59-1.41V5c0-1.1-.9-2-2-2h-3.86zM4.17 16.14l8.83-8.83 4.69 4.69-8.83 8.83-4.69-4.69z"/></svg>
+</button>
+<button id="locateBtn" class="fab">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+</button>
+<div id="picPanel">
+    <div id="picGrid"></div>
+</div>
+<div id="colorPanel">
+    <div id="colorRow">
+        <div class="color-btn" data-color="#000000" style="background:#000000;"></div>
+        <div class="color-btn" data-color="#ffffff" style="background:#ffffff;"></div>
+        <div class="color-btn" data-color="#30D158" style="background:#30D158;"></div>
+        <div class="color-btn" data-color="#FFD60A" style="background:#FFD60A;"></div>
+        <div class="color-btn" data-color="#FF453A" style="background:#FF453A;"></div>
+    </div>
+</div>
+<input id="widthSlider" type="range" min="1" max="30" value="5" orient="vertical">
+<div id="placeHint" class="place-hint">Кликните на карту — изображение будет установлено</div>
+
+<script src="https://api-maps.yandex.ru/v3/?apikey=c0e28937-4e16-4d15-9b99-09a30cb8fc13&lang=ru_RU"></script>
+<script>
+let map = null, userMarker = null, lastPos = null;
+let placedMarkers = [], selectedPic = null, drawMode = false, drawFeature = null, drawing = false;
+let eraserMode = false, drawnLines = [], eraserDrag = false;
+let drawColor = '#000000';
+let drawWidth = 5;
+
+// Список изображений из папки pic/ — при добавлении новых файлов добавьте их сюда
+const PIC_FILES = ['et_preview_url (3) (фон удален).png', 'et_preview_url (4) (фон удален).png'];
+
+// Реальный размер изображения на карте в метрах (по ширине)
+const PIC_SIZE_M = 8;
+
+const userLocSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#007AFF" opacity="0.2"/><circle cx="20" cy="20" r="9" fill="#007AFF" stroke="#fff" stroke-width="2.5"/></svg>`;
+
+function getPos() {
+    return new Promise(resolve => navigator.geolocation.getCurrentPosition(p => resolve([p.coords.longitude, p.coords.latitude]), () => resolve(null), { enableHighAccuracy: true, timeout: 15000 }));
+}
+
+function updateMarker() {
+    if (userMarker && lastPos) userMarker.update({ coordinates: [lastPos[1], lastPos[0]] });
+}
+
+function buildPicGrid() {
+    const grid = document.getElementById('picGrid');
+    grid.innerHTML = '';
+    PIC_FILES.forEach(file => {
+        const cell = document.createElement('div');
+        cell.className = 'pic-item';
+        cell.dataset.file = file;
+        const imgSrc = 'pic/' + encodeURIComponent(file);
+        const img = document.createElement('img');
+        img.src = imgSrc;
+        img.draggable = false;
+        img.onerror = () => cell.classList.add('hidden');
+        cell.appendChild(img);
+        cell.onclick = () => selectPic(cell);
+        grid.appendChild(cell);
+    });
+}
+
+function selectPic(cell) {
+    if (drawMode) stopDraw();
+    if (eraserMode) stopEraser();
+    deselectMarker();
+    document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+    cell.classList.add('active');
+    selectedPic = cell.dataset.file;
+    document.getElementById('picPanel').classList.remove('visible');
+    document.getElementById('placeHint').classList.add('visible');
+    document.getElementById('addPicBtn').classList.add('active');
+}
+
+const rotateSvg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff"><path d="M12 6v3l-4-4 4-4v3c4.97 0 8 3.58 8 8 0 .34-.03.67-.08 1h-2.06c.04-.33.06-.66.06-1 0-3.31-2.69-6-6-6zm0 18v-3c-4.97 0-8-3.58-8-8 0-.34.03-.67.08-1h2.06c-.04.33-.06.66-.06 1 0 3.31 2.69 6 6 6v-3l4 4-4 4z"/></svg>`;
+
+let lastDrawScreen = null;
+let lineCoords = [];
+
+function setMarkersDraggable(v) {
+    placedMarkers.forEach(m => { if (placedMarkers.indexOf(m) !== -1) m.update({ draggable: v }); });
+}
+
+function startDraw() {
+    drawMode = true;
+    setMarkersDraggable(false);
+    document.getElementById('drawBtn').classList.add('active');
+    document.getElementById('addPicBtn').classList.remove('active');
+    deselectMarker();
+    document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+    selectedPic = null;
+    document.getElementById('placeHint').classList.remove('visible');
+    document.getElementById('colorPanel').classList.add('visible');
+    document.getElementById('widthSlider').classList.add('visible');
+    map.update({ behaviors: [] });
+}
+
+function stopDraw() {
+    drawing = false;
+    drawMode = false;
+    setMarkersDraggable(true);
+    document.getElementById('drawBtn').classList.remove('active');
+    document.getElementById('colorPanel').classList.remove('visible');
+    document.getElementById('widthSlider').classList.remove('visible');
+    map.update({ behaviors: appBehaviors });
+}
+
+function startEraser() {
+    drawing = false;
+    drawMode = false;
+    eraserMode = true;
+    eraserDrag = false;
+    setMarkersDraggable(false);
+    document.getElementById('eraserBtn').classList.add('active');
+    document.getElementById('drawBtn').classList.remove('active');
+    deselectMarker();
+    document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+    selectedPic = null;
+    document.getElementById('placeHint').classList.remove('visible');
+    document.getElementById('colorPanel').classList.remove('visible');
+    document.getElementById('widthSlider').classList.remove('visible');
+    map.update({ behaviors: [] });
+}
+
+function stopEraser() {
+    eraserMode = false;
+    eraserDrag = false;
+    setMarkersDraggable(true);
+    document.getElementById('eraserBtn').classList.remove('active');
+    map.update({ behaviors: appBehaviors });
+}
+
+function eraseLine(line) {
+    if (line.feature) map.removeChild(line.feature);
+    drawnLines.splice(drawnLines.indexOf(line), 1);
+}
+
+function eraseAt(coords) {
+    const th = 3 * metersPerPixel(coords[1]);
+    for (let i = drawnLines.length - 1; i >= 0; i--) {
+        const line = drawnLines[i];
+        if (!line.coords || line.coords.length < 2) continue;
+        if (distToLineMeters(coords, line.coords) < th) eraseLine(line);
+    }
+}
+
+function distToLineMeters(p, line) {
+    let min = Infinity;
+    for (let i = 0; i < line.length - 1; i++) {
+        const d = ptSegDistMeters(p, line[i], line[i + 1]);
+        if (d < min) min = d;
+    }
+    return min;
+}
+
+function ptSegDistMeters(p, a, b) {
+    const ax = 111320 * Math.cos(a[1] * Math.PI / 180) * a[0];
+    const ay = 111320 * a[1];
+    const bx = 111320 * Math.cos(b[1] * Math.PI / 180) * b[0];
+    const by = 111320 * b[1];
+    const px = 111320 * Math.cos(p[1] * Math.PI / 180) * p[0];
+    const py = 111320 * p[1];
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+    const cx = ax + t * dx, cy = ay + t * dy;
+    return Math.hypot(px - cx, py - cy);
+}
+
+function addDrawPoint(coords, screen) {
+    if (screen && lastDrawScreen) {
+        const dx = screen[0] - lastDrawScreen[0], dy = screen[1] - lastDrawScreen[1];
+        if (dx * dx + dy * dy < 16) return;
+    }
+    lastDrawScreen = screen || null;
+    lineCoords.push(coords);
+    if (!drawFeature) {
+        drawFeature = new ymaps3.YMapFeature({
+            geometry: { type: 'LineString', coordinates: [coords] },
+            style: { stroke: [{ width: drawWidth, color: drawColor }] }
+        });
+        map.addChild(drawFeature);
+    } else {
+        drawFeature.update({ geometry: { type: 'LineString', coordinates: lineCoords } });
+    }
+}
+
+function placePic(lat, lon) {
+    if (!selectedPic) return;
+    const el = document.createElement('div');
+    el.className = 'pic-marker';
+    el.style.cssText = 'transform:translate(-50%,-50%);cursor:grab;';
+    const wrap = document.createElement('div');
+    wrap.className = 'rot-wrap';
+    wrap.style.transform = 'translate(-50%,-50%)';
+    const img = document.createElement('img');
+    img.src = 'pic/' + encodeURIComponent(selectedPic);
+    img.style.cssText = 'height:auto;display:block;pointer-events:none;';
+    img.onerror = () => el.remove();
+    wrap.appendChild(img);
+    const handle = document.createElement('div');
+    handle.className = 'rot-handle';
+    handle.innerHTML = rotateSvg;
+    const delBtn = document.createElement('div');
+    delBtn.className = 'del-handle';
+    delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+    el.appendChild(wrap);
+    el.appendChild(handle);
+    el.appendChild(delBtn);
+    const marker = new ymaps3.YMapMarker({
+        coordinates: [lon, lat],
+        draggable: true,
+        onDragMove: (coords) => {
+            marker._lat = coords[1];
+            marker._lon = coords[0];
+            updatePicMarker(marker);
+        }
+    }, el);
+    marker._img = img;
+    marker._rotWrap = wrap;
+    marker._rot = 0;
+    marker._lat = lat;
+    marker._lon = lon;
+    marker._select = el;
+    delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        deletePicMarker(marker);
+    });
+    setupRotate(marker);
+    updatePicMarker(marker);
+    map.addChild(marker);
+    placedMarkers.push(marker);
+    document.getElementById('placeHint').classList.remove('visible');
+    document.getElementById('addPicBtn').classList.remove('active');
+    selectedPic = null;
+    document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+}
+
+let selectedMarker = null;
+let suppressDeselectUntil = 0;
+let longPressCtx = null;
+
+window.addEventListener('pointerdown', e => {
+    const t = e.target;
+    const markerEl = t.closest ? t.closest('.pic-marker') : null;
+    if (!markerEl) return;
+    if (t.closest && t.closest('.del-handle')) return;
+    if (drawMode) return;
+    const marker = placedMarkers.find(m => m._select === markerEl);
+    if (!marker) return;
+    longPressCtx = {
+        id: e.pointerId, marker,
+        x: e.clientX, y: e.clientY,
+        timer: setTimeout(() => {
+            selectMarker(marker);
+            suppressDeselectUntil = Date.now() + 600;
+        }, 500)
+    };
+}, true);
+
+window.addEventListener('pointermove', e => {
+    if (!longPressCtx || e.pointerId !== longPressCtx.id) return;
+    if (Math.abs(e.clientX - longPressCtx.x) > 10 || Math.abs(e.clientY - longPressCtx.y) > 10) {
+        clearTimeout(longPressCtx.timer);
+        longPressCtx = null;
+    }
+}, true);
+
+const clearLongPress = e => {
+    if (!longPressCtx || e.pointerId !== longPressCtx.id) return;
+    clearTimeout(longPressCtx.timer);
+    longPressCtx = null;
+};
+window.addEventListener('pointerup', clearLongPress, true);
+window.addEventListener('pointercancel', clearLongPress, true);
+
+function deletePicMarker(marker) {
+    if (selectedMarker === marker) {
+        selectedMarker = null;
+    }
+    map.removeChild(marker);
+    placedMarkers = placedMarkers.filter(m => m !== marker);
+}
+
+function selectMarker(marker) {
+    if (selectedMarker && selectedMarker !== marker) {
+        selectedMarker._select.classList.remove('selected');
+    }
+    selectedMarker = marker;
+    marker._select.classList.add('selected');
+}
+
+function deselectMarker() {
+    if (selectedMarker) {
+        selectedMarker._select.classList.remove('selected');
+        selectedMarker = null;
+    }
+}
+
+function setupRotate(marker) {
+    const handle = marker._select.querySelector('.rot-handle');
+    const wrap = marker._rotWrap;
+    let dragging = false, cx = 0, cy = 0, baseAngle = 0, baseRot = 0;
+    handle.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragging = true;
+        marker.update({ draggable: false });
+        map.update({ behaviors: [] });
+        const r = wrap.getBoundingClientRect();
+        cx = r.left + r.width / 2;
+        cy = r.top + r.height / 2;
+        baseAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
+        baseRot = marker._rot;
+        handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        const ang = Math.atan2(e.clientY - cy, e.clientX - cx);
+        marker._rot = baseRot + (ang - baseAngle) * 180 / Math.PI;
+        wrap.style.transform = `translate(-50%,-50%) rotate(${marker._rot + mapRot}deg)`;
+    });
+    const stop = () => {
+        if (dragging) {
+            marker.update({ draggable: true });
+            map.update({ behaviors: appBehaviors });
+        }
+        dragging = false;
+    };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+}
+
+// Метры на пиксель (Web Mercator, тайлы 256px)
+function metersPerPixel(lat) {
+    const zoom = map.zoom || 0;
+    return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+}
+
+let rotGesture = null;
+let firstTouch = null;
+let lastTouchMarker = null;
+
+window.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'touch') return;
+    if (drawMode || eraserMode) return;
+    const t = e.target;
+    const markerEl = t.closest ? t.closest('.pic-marker') : null;
+    if (markerEl && !(t.closest && (t.closest('.del-handle') || t.closest('.rot-handle')))) {
+        if (!firstTouch) {
+            const marker = placedMarkers.find(m => m._select === markerEl);
+            if (!marker) return;
+            marker.update({ draggable: false });
+            map.update({ behaviors: [] });
+            lastTouchMarker = marker;
+            firstTouch = {
+                id: e.pointerId, marker,
+                start: { x: e.clientX, y: e.clientY },
+                last: { x: e.clientX, y: e.clientY },
+                baseLat: marker._lat,
+                baseLon: marker._lon
+            };
+        }
+    }
+    if (firstTouch && !rotGesture && e.pointerId !== firstTouch.id) {
+        const marker = firstTouch.marker;
+        if (!marker || placedMarkers.indexOf(marker) === -1) { firstTouch = null; return; }
+        firstTouch.start = { x: firstTouch.last.x, y: firstTouch.last.y };
+        firstTouch.baseLat = marker._lat;
+        firstTouch.baseLon = marker._lon;
+        rotGesture = {
+            marker,
+            firstId: firstTouch.id,
+            secondId: e.pointerId,
+            firstLast: { ...firstTouch.last },
+            secondLast: { x: e.clientX, y: e.clientY },
+            baseAngle: Math.atan2(e.clientY - firstTouch.last.y, e.clientX - firstTouch.last.x),
+            baseRot: marker._rot
+        };
+    }
+}, true);
+
+window.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'touch') return;
+    if (firstTouch && !rotGesture && e.pointerId === firstTouch.id) {
+        const m = firstTouch.marker;
+        const dx = e.clientX - firstTouch.start.x;
+        const dy = e.clientY - firstTouch.start.y;
+        const mpp = metersPerPixel(firstTouch.baseLat);
+        const R = mapRot * Math.PI / 180;
+        const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
+        const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
+        m._lat = firstTouch.baseLat + dNorth / 111320;
+        m._lon = firstTouch.baseLon + dEast / (111320 * Math.cos(firstTouch.baseLat * Math.PI / 180));
+        m.update({ coordinates: [m._lon, m._lat] });
+        updatePicMarker(m);
+        firstTouch.last = { x: e.clientX, y: e.clientY };
+        return;
+    }
+    if (!rotGesture) return;
+    const g = rotGesture;
+    if (e.pointerId === g.firstId) g.firstLast = { x: e.clientX, y: e.clientY };
+    if (e.pointerId === g.secondId) g.secondLast = { x: e.clientX, y: e.clientY };
+    if (g.firstLast && g.secondLast) {
+        const ang = Math.atan2(g.secondLast.y - g.firstLast.y, g.secondLast.x - g.firstLast.x);
+        g.marker._rot = g.baseRot + (ang - g.baseAngle) * 180 / Math.PI;
+        g.marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${g.marker._rot + mapRot}deg)`;
+    }
+}, true);
+
+const rotEnd = e => {
+    if (e.pointerType !== 'touch') return;
+    if (rotGesture && (e.pointerId === rotGesture.secondId || e.pointerId === rotGesture.firstId)) {
+        rotGesture = null;
+    }
+    if (firstTouch && e.pointerId === firstTouch.id) {
+        firstTouch = null;
+    }
+    if (!firstTouch && !rotGesture) {
+        const m = lastTouchMarker;
+        lastTouchMarker = null;
+if (m && placedMarkers.indexOf(m) !== -1) {
+            m.update({ draggable: true });
+        }
+        map.update({ behaviors: appBehaviors });
+    }
+};
+window.addEventListener('pointerup', rotEnd, true);
+window.addEventListener('pointercancel', rotEnd, true);
+
+let mapRot = 0;
+let appBehaviors = ['drag', 'scrollZoom', 'dblClick', 'pinchZoom', 'pinchRotate', 'pinchTilt', 'mouseTilt', 'mouseRotate'];
+
+function updatePicMarker(marker) {
+    if (!marker || !marker._img) return;
+    const mpp = metersPerPixel(marker._lat);
+    if (!mpp) return;
+    marker._img.style.width = (PIC_SIZE_M / mpp) + 'px';
+    marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._rot + mapRot}deg)`;
+}
+
+function updateAllPicMarkers(event) {
+    if (event && event.camera && event.camera.azimuth !== undefined) mapRot = event.camera.azimuth * 180 / Math.PI;
+    placedMarkers.forEach(updatePicMarker);
+}
+
+(async () => {
+    const { YMap, YMapDefaultSatelliteLayer, YMapDefaultFeaturesLayer, YMapMarker, YMapListener, YMapFeature } = await ymaps3.ready;
+
+    let center = await getPos();
+    map = new YMap(document.getElementById('map'), {
+        location: { center: center || [43.9968, 56.3269], zoom: 17 },
+        behaviors: appBehaviors
+    });
+    map.addChild(new YMapDefaultSatelliteLayer({}));
+    map.addChild(new YMapDefaultFeaturesLayer({ zIndex: 100000 }));
+    map.addChild(new YMapListener({
+        onUpdate: updateAllPicMarkers
+    }));
+
+    const el = document.createElement('div');
+    el.style.cssText = 'width:40px;height:40px;transform:translate(-50%,-50%);';
+    el.innerHTML = userLocSvg;
+    userMarker = new YMapMarker({ coordinates: [0, 0] }, el);
+    map.addChild(userMarker);
+
+    if (center) lastPos = [center[1], center[0]];
+    updateMarker();
+
+    map.addChild(new YMapListener({
+        onFastClick: (_, event) => {
+            if (selectedPic && event?.coordinates) {
+                placePic(event.coordinates[1], event.coordinates[0]);
+            } else if (Date.now() < suppressDeselectUntil) {
+                return;
+            } else {
+                deselectMarker();
+            }
+        },
+        onPointerDown: (_, event) => {
+            if (eraserMode) {
+                if (!event?.coordinates) return;
+                eraserDrag = true;
+                eraseAt(event.coordinates);
+                return;
+            }
+            if (!drawMode || !event?.coordinates || drawing) return;
+            drawing = true;
+            drawFeature = null;
+            lineCoords = [];
+            lastDrawScreen = null;
+            addDrawPoint(event.coordinates, event.screenCoordinates);
+        },
+        onPointerMove: (_, event) => {
+            if (eraserMode) {
+                if (eraserDrag && event?.coordinates) eraseAt(event.coordinates);
+                return;
+            }
+            if (!drawMode || !drawing || !event?.coordinates) return;
+            addDrawPoint(event.coordinates, event.screenCoordinates);
+        },
+        onPointerUp: () => {
+            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: lineCoords.slice() });
+            drawing = false;
+            drawFeature = null;
+            lineCoords = [];
+            eraserDrag = false;
+        },
+        onPointerCancel: () => {
+            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: lineCoords.slice() });
+            drawing = false;
+            drawFeature = null;
+            lineCoords = [];
+            eraserDrag = false;
+        }
+    }));
+
+    document.getElementById('drawBtn').addEventListener('click', () => {
+        if (drawMode) {
+            stopDraw();
+        } else {
+            if (eraserMode) stopEraser();
+            document.getElementById('picPanel').classList.remove('visible');
+            startDraw();
+        }
+    });
+
+    document.getElementById('eraserBtn').addEventListener('click', () => {
+        if (eraserMode) {
+            stopEraser();
+        } else {
+            if (drawMode) stopDraw();
+            document.getElementById('picPanel').classList.remove('visible');
+            startEraser();
+        }
+    });
+
+    document.querySelectorAll('.color-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            drawColor = btn.dataset.color;
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+    });
+
+    document.getElementById('widthSlider').addEventListener('input', e => {
+        drawWidth = parseInt(e.target.value, 10);
+    });
+
+    navigator.geolocation.watchPosition(p => {
+        lastPos = [p.coords.latitude, p.coords.longitude];
+        updateMarker();
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+
+    document.getElementById('locateBtn').addEventListener('click', () => {
+        if (!lastPos) return;
+        map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
+    });
+
+    document.getElementById('addPicBtn').addEventListener('click', () => {
+        if (drawMode) stopDraw();
+        if (eraserMode) stopEraser();
+        const panel = document.getElementById('picPanel');
+        panel.classList.toggle('visible');
+        if (panel.classList.contains('visible')) buildPicGrid();
+    });
+
+    buildPicGrid();
+    document.querySelector('.color-btn[data-color="#000000"]').classList.add('active');
+    document.getElementById('loading').classList.add('hidden');
+})();
+</script>
+</body>
+</html>
