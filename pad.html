@@ -521,6 +521,7 @@ window.addEventListener('pointermove', e => {
 
 const rotEnd = e => {
     if (e.pointerType !== 'touch') return;
+    if (drawMode || eraserMode) return;
     if (rotGesture && (e.pointerId === rotGesture.secondId || e.pointerId === rotGesture.firstId)) {
         rotGesture = null;
     }
