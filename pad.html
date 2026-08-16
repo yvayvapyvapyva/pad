@@ -349,8 +349,8 @@ function placePic(lat, lon) {
     }, el);
     marker._img = img;
     marker._rotWrap = wrap;
-    // Изначальный вектор направления: 0° = строго вверх (север), обновляется при каждом изменении направления
-    marker._heading = 0;
+    // Изначальное направление: строго вверх экрана, компенсирует текущий поворот карты
+    marker._heading = -mapRot;
     marker._lat = lat;
     marker._lon = lon;
     marker._select = el;
