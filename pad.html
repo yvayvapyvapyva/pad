@@ -83,7 +83,7 @@
         .drag-handle {
             position:absolute; left:50%; top:0; transform:translate(-50%,-50%);
             width:22px; height:22px; border-radius:50%; display:none; align-items:center; justify-content:center;
-            background:rgba(0,0,0,0.2); border:2px solid rgba(255,255,255,0.4); box-shadow:0 2px 8px rgba(0,0,0,0.5);
+            background:rgba(0,0,0,0.1);
             cursor:grab; touch-action:none; z-index:3;
         }
         .pic-marker .drag-handle { display:flex; }
@@ -360,8 +360,8 @@ function setupTopDrag(marker) {
     });
     const stop = () => {
         if (dragging) {
-            marker.update({ draggable: true });
-            map.update({ behaviors: appBehaviors });
+            marker.update({ draggable: !(drawMode || eraserMode) });
+            map.update({ behaviors: (drawMode || eraserMode) ? [] : appBehaviors });
         }
         dragging = false;
     };
