@@ -96,6 +96,14 @@
         }
         .pic-marker.selected .del-handle { display:flex; }
         .del-handle:active { transform:translate(-50%,-50%) translateY(76px) scale(0.9); }
+        .drag-handle {
+            position:absolute; left:50%; top:0; transform:translate(-50%,-50%);
+            width:22px; height:22px; border-radius:50%; display:none; align-items:center; justify-content:center;
+            background:#fff; border:2px solid #30D158; box-shadow:0 2px 8px rgba(0,0,0,0.5);
+            cursor:grab; touch-action:none; z-index:3;
+        }
+        .pic-marker.selected .drag-handle { display:flex; }
+        .drag-handle::after { content:''; width:8px; height:8px; border-radius:50%; background:#30D158; }
     </style>
 </head>
 <body>
@@ -140,10 +148,10 @@ let drawPointerId = null;
 let eraserPointerId = null;
 
 // Список изображений из папки pic/ — при добавлении новых файлов добавьте их сюда
-const PIC_FILES = ['et_preview_url (3) (фон удален).png', 'et_preview_url (4) (фон удален).png'];
+const PIC_FILES = ['car.png', 'et_preview_url (3) (фон удален).png', 'et_preview_url (4) (фон удален).png'];
 
-// Реальный размер изображения на карте в метрах (по ширине)
-const PIC_SIZE_M = 8;
+// Реальный размер изображения на карте в метрах (по высоте)
+const PIC_SIZE_M = 5;
 
 const userLocSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#007AFF" opacity="0.2"/><circle cx="20" cy="20" r="9" fill="#007AFF" stroke="#fff" stroke-width="2.5"/></svg>`;
 
@@ -309,6 +317,9 @@ function placePic(lat, lon) {
     img.style.cssText = 'height:auto;display:block;pointer-events:none;';
     img.onerror = () => el.remove();
     wrap.appendChild(img);
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    wrap.appendChild(dragHandle);
     const handle = document.createElement('div');
     handle.className = 'rot-handle';
     handle.innerHTML = rotateSvg;
@@ -329,7 +340,8 @@ function placePic(lat, lon) {
     }, el);
     marker._img = img;
     marker._rotWrap = wrap;
-    marker._rot = 0;
+    // Изначальный вектор направления: 0° = строго вверх (север), обновляется при каждом изменении направления
+    marker._heading = 0;
     marker._lat = lat;
     marker._lon = lon;
     marker._select = el;
@@ -338,6 +350,7 @@ function placePic(lat, lon) {
         deletePicMarker(marker);
     });
     setupRotate(marker);
+    setupTopDrag(marker);
     updatePicMarker(marker);
     map.addChild(marker);
     placedMarkers.push(marker);
@@ -355,7 +368,7 @@ window.addEventListener('pointerdown', e => {
     const t = e.target;
     const markerEl = t.closest ? t.closest('.pic-marker') : null;
     if (!markerEl) return;
-    if (t.closest && t.closest('.del-handle')) return;
+    if (t.closest && (t.closest('.del-handle') || t.closest('.drag-handle'))) return;
     if (drawMode) return;
     const marker = placedMarkers.find(m => m._select === markerEl);
     if (!marker) return;
@@ -422,14 +435,58 @@ function setupRotate(marker) {
         cx = r.left + r.width / 2;
         cy = r.top + r.height / 2;
         baseAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
-        baseRot = marker._rot;
+        baseRot = marker._heading;
         handle.setPointerCapture(e.pointerId);
     });
     handle.addEventListener('pointermove', e => {
         if (!dragging) return;
         const ang = Math.atan2(e.clientY - cy, e.clientX - cx);
-        marker._rot = baseRot + (ang - baseAngle) * 180 / Math.PI;
-        wrap.style.transform = `translate(-50%,-50%) rotate(${marker._rot + mapRot}deg)`;
+        marker._heading = baseRot + (ang - baseAngle) * 180 / Math.PI;
+        wrap.style.transform = `translate(-50%,-50%) rotate(${marker._heading + mapRot}deg)`;
+    });
+    const stop = () => {
+        if (dragging) {
+            marker.update({ draggable: true });
+            map.update({ behaviors: appBehaviors });
+        }
+        dragging = false;
+    };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+}
+
+function setupTopDrag(marker) {
+    const handle = marker._select.querySelector('.drag-handle');
+    let dragging = false, cx = 0, cy = 0;
+    handle.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragging = true;
+        marker.update({ draggable: false });
+        map.update({ behaviors: [] });
+        const rect = marker._rotWrap.getBoundingClientRect();
+        cx = rect.left + rect.width / 2;
+        cy = rect.top + rect.height / 2;
+        handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        const h = (marker._img.offsetHeight || 0) / 2;
+        const vx = e.clientX - cx, vy = e.clientY - cy;
+        const ang = Math.atan2(vy, vx);
+        marker._heading = ang * 180 / Math.PI + 90 - mapRot;
+        const nx = e.clientX - Math.cos(ang) * h;
+        const ny = e.clientY - Math.sin(ang) * h;
+        const dx = nx - cx, dy = ny - cy;
+        const mpp = metersPerPixel(marker._lat);
+        const R = mapRot * Math.PI / 180;
+        const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
+        const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
+        marker._lat += dNorth / 111320;
+        marker._lon += dEast / (111320 * Math.cos(marker._lat * Math.PI / 180));
+        marker.update({ coordinates: [marker._lon, marker._lat] });
+        updatePicMarker(marker);
+        cx = nx; cy = ny;
     });
     const stop = () => {
         if (dragging) {
@@ -457,7 +514,7 @@ window.addEventListener('pointerdown', e => {
     if (drawMode || eraserMode) return;
     const t = e.target;
     const markerEl = t.closest ? t.closest('.pic-marker') : null;
-    if (markerEl && !(t.closest && (t.closest('.del-handle') || t.closest('.rot-handle')))) {
+    if (markerEl && !(t.closest && (t.closest('.del-handle') || t.closest('.rot-handle') || t.closest('.drag-handle')))) {
         if (!firstTouch) {
             const marker = placedMarkers.find(m => m._select === markerEl);
             if (!marker) return;
@@ -486,7 +543,7 @@ window.addEventListener('pointerdown', e => {
             firstLast: { ...firstTouch.last },
             secondLast: { x: e.clientX, y: e.clientY },
             baseAngle: Math.atan2(e.clientY - firstTouch.last.y, e.clientX - firstTouch.last.x),
-            baseRot: marker._rot
+            baseRot: marker._heading
         };
     }
 }, true);
@@ -514,8 +571,8 @@ window.addEventListener('pointermove', e => {
     if (e.pointerId === g.secondId) g.secondLast = { x: e.clientX, y: e.clientY };
     if (g.firstLast && g.secondLast) {
         const ang = Math.atan2(g.secondLast.y - g.firstLast.y, g.secondLast.x - g.firstLast.x);
-        g.marker._rot = g.baseRot + (ang - g.baseAngle) * 180 / Math.PI;
-        g.marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${g.marker._rot + mapRot}deg)`;
+        g.marker._heading = g.baseRot + (ang - g.baseAngle) * 180 / Math.PI;
+        g.marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${g.marker._heading + mapRot}deg)`;
     }
 }, true);
 
@@ -547,8 +604,8 @@ function updatePicMarker(marker) {
     if (!marker || !marker._img) return;
     const mpp = metersPerPixel(marker._lat);
     if (!mpp) return;
-    marker._img.style.width = (PIC_SIZE_M / mpp) + 'px';
-    marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._rot + mapRot}deg)`;
+    marker._img.style.height = (PIC_SIZE_M / mpp) + 'px';
+    marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._heading + mapRot}deg)`;
 }
 
 function updateAllPicMarkers(event) {
