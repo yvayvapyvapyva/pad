@@ -61,7 +61,7 @@
         #picGrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
         .pic-item {
             display:flex; align-items:center; justify-content:center; padding:6px; border-radius:10px;
-            background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); cursor:pointer;
+            background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); cursor:pointer; touch-action:none;
         }
         .pic-item img { max-width:80px; max-height:60px; object-fit:contain; display:block; }
         .pic-item.active { border-color:#30D158; background:rgba(48,209,88,0.2); }
@@ -72,12 +72,6 @@
         #loading.hidden { opacity:0; pointer-events:none; transition:opacity 0.6s; }
         .spinner { width:40px; height:40px; border:3px solid rgba(255,255,255,0.15); border-top-color:#30D158; border-radius:50%; animation:spin 0.8s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        .place-hint {
-            position:fixed; top:calc(76px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:9005;
-            background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.25); color:#fff; font-size:13px; font-weight:600;
-            padding:8px 16px; border-radius:100px; display:none; pointer-events:none;
-        }
-        .place-hint.visible { display:block; }
         .pic-marker { max-width:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none; }
         .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
         .drag-handle {
@@ -118,7 +112,6 @@
     </div>
 </div>
 <input id="widthSlider" type="range" min="1" max="30" value="5" orient="vertical">
-<div id="placeHint" class="place-hint">Кликните на карту — изображение будет установлено</div>
 
 <script src="https://api-maps.yandex.ru/v3/?apikey=c0e28937-4e16-4d15-9b99-09a30cb8fc13&lang=ru_RU"></script>
 <script>
@@ -131,7 +124,7 @@ let drawPointerId = null;
 let eraserPointerId = null;
 
 // Список изображений из папки pic/ — при добавлении новых файлов добавьте их сюда
-const PIC_FILES = ['car.png', 'et_preview_url (3) (фон удален).png', 'et_preview_url (4) (фон удален).png'];
+const PIC_FILES = ['car.png', '1.png', '2.png', '3.png', '4.png', '6.png', '7.png', '8.png', '9.png', '10.png', '11.png'];
 
 // Реальный размер изображения на карте в метрах (по высоте)
 const PIC_SIZE_M = 5;
@@ -159,19 +152,68 @@ function buildPicGrid() {
         img.draggable = false;
         img.onerror = () => cell.classList.add('hidden');
         cell.appendChild(img);
-        cell.onclick = () => selectPic(cell);
+        cell.addEventListener('pointerdown', e => startPicDrag(cell, e));
         grid.appendChild(cell);
     });
 }
 
-function selectPic(cell) {
-    if (drawMode) stopDraw();
-    if (eraserMode) stopEraser();
-    document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
-    cell.classList.add('active');
-    selectedPic = cell.dataset.file;
-    document.getElementById('placeHint').classList.add('visible');
-    document.getElementById('addPicBtn').classList.add('active');
+let picDrag = null;
+let picGhost = null;
+
+function startPicDrag(cell, e) {
+    e.preventDefault();
+    picDrag = { id: e.pointerId, item: cell, startX: e.clientX, startY: e.clientY, active: false };
+}
+
+window.addEventListener('pointermove', e => {
+    if (!picDrag || e.pointerId !== picDrag.id) return;
+    const dx = e.clientX - picDrag.startX, dy = e.clientY - picDrag.startY;
+    if (!picDrag.active) {
+        if (dx * dx + dy * dy < 49) return;
+        picDrag.active = true;
+        selectedPic = picDrag.item.dataset.file;
+        picGhost = document.createElement('img');
+        picGhost.src = 'pic/' + encodeURIComponent(selectedPic);
+        picGhost.style.cssText = 'position:fixed;left:0;top:0;height:72px;width:auto;max-width:96px;max-height:72px;object-fit:contain;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
+        document.body.appendChild(picGhost);
+    }
+    if (picGhost) {
+        picGhost.style.left = e.clientX + 'px';
+        picGhost.style.top = e.clientY + 'px';
+    }
+}, true);
+
+function endPicDrag(e) {
+    if (!picDrag || e.pointerId !== picDrag.id) return;
+    const active = picDrag.active;
+    picDrag = null;
+    if (picGhost) { picGhost.remove(); picGhost = null; }
+    if (!active) return;
+    const mapEl = document.getElementById('map');
+    const rect = mapEl.getBoundingClientRect();
+    if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        const geo = screenToGeo(e.clientX, e.clientY);
+        placePic(geo.lat, geo.lon);
+    } else {
+        selectedPic = null;
+    }
+}
+window.addEventListener('pointerup', endPicDrag, true);
+window.addEventListener('pointercancel', endPicDrag, true);
+
+function screenToGeo(clientX, clientY) {
+    const mapEl = document.getElementById('map');
+    const rect = mapEl.getBoundingClientRect();
+    const sx = clientX - rect.left - rect.width / 2;
+    const sy = clientY - rect.top - rect.height / 2;
+    const mpp = metersPerPixel(map.center[1]);
+    const R = mapRot * Math.PI / 180;
+    const dEast = (sx * Math.cos(R) + sy * Math.sin(R)) * mpp;
+    const dNorth = (sx * Math.sin(R) - sy * Math.cos(R)) * mpp;
+    return {
+        lat: map.center[1] + dNorth / 111320,
+        lon: map.center[0] + dEast / (111320 * Math.cos(map.center[1] * Math.PI / 180))
+    };
 }
 
 let lastDrawScreen = null;
@@ -185,10 +227,8 @@ function startDraw() {
     drawMode = true;
     setMarkersDraggable(false);
     document.getElementById('drawBtn').classList.add('active');
-    document.getElementById('addPicBtn').classList.remove('active');
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
     selectedPic = null;
-    document.getElementById('placeHint').classList.remove('visible');
     document.getElementById('colorPanel').classList.add('visible');
     document.getElementById('widthSlider').classList.add('visible');
     map.update({ behaviors: [] });
@@ -214,7 +254,6 @@ function startEraser() {
     document.getElementById('drawBtn').classList.remove('active');
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
     selectedPic = null;
-    document.getElementById('placeHint').classList.remove('visible');
     document.getElementById('colorPanel').classList.remove('visible');
     document.getElementById('widthSlider').classList.remove('visible');
     map.update({ behaviors: [] });
@@ -319,8 +358,6 @@ function placePic(lat, lon) {
     updatePicMarker(marker);
     map.addChild(marker);
     placedMarkers.push(marker);
-    document.getElementById('placeHint').classList.remove('visible');
-    document.getElementById('addPicBtn').classList.remove('active');
     selectedPic = null;
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
 }
@@ -477,11 +514,6 @@ function updateAllPicMarkers(event) {
     updateMarker();
 
     map.addChild(new YMapListener({
-        onFastClick: (_, event) => {
-            if (selectedPic && event?.coordinates) {
-                placePic(event.coordinates[1], event.coordinates[0]);
-            }
-        },
         onPointerDown: (_, event) => {
             if (eraserMode) {
                 if (!event?.coordinates) return;
