@@ -23,9 +23,9 @@
         #locateBtn { top:calc(12px + env(safe-area-inset-top)); right:12px; }
         #locateBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
         #picPanel {
-            position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:76px; z-index:9005;
+            position:fixed; bottom:calc(76px + env(safe-area-inset-bottom)); left:12px; right:12px; z-index:9005;
             background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.12); border-radius:16px;
-            padding:10px; max-width:calc(100vw - 100px); max-height:50vh; overflow-y:auto; display:none;
+            padding:10px; max-height:50vh; overflow-y:auto; display:none;
             box-shadow:0 20px 60px rgba(0,0,0,0.4);
         }
         #picPanel.visible { display:block; }
@@ -58,10 +58,11 @@
         }
         .color-btn.active { border-color:#30D158; box-shadow:0 0 0 3px rgba(48,209,88,0.4); }
         .color-btn:active { transform:scale(0.9); }
-        #picGrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+        #picGrid { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
         .pic-item {
             display:flex; align-items:center; justify-content:center; padding:6px; border-radius:10px;
             background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); cursor:pointer; touch-action:none;
+            flex:0 0 auto;
         }
         .pic-item img { max-width:80px; max-height:60px; object-fit:contain; display:block; }
         .pic-item.active { border-color:#30D158; background:rgba(48,209,88,0.2); }
