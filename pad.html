@@ -82,6 +82,31 @@
             cursor:grab; touch-action:none; z-index:3;
         }
         .pic-marker .drag-handle { display:flex; }
+        .turn-indicator {
+            position:absolute; width:10px; height:10px;
+            background:#FFCC00; border-radius:50%; opacity:0; pointer-events:none;
+            box-shadow:0 0 10px 3px rgba(255,204,0,0.85);
+        }
+        .turn-left-top { left:0; top:0; transform:translate(-50%,-50%); }
+        .turn-left-bottom { left:0; bottom:0; transform:translate(-50%,50%); }
+        .turn-right-top { right:0; top:0; transform:translate(50%,-50%); }
+        .turn-right-bottom { right:0; bottom:0; transform:translate(50%,50%); }
+        .signal-left .turn-left-top, .signal-left .turn-left-bottom,
+        .signal-right .turn-right-top, .signal-right .turn-right-bottom {
+            animation:turnBlink 0.9s step-end infinite;
+        }
+        @keyframes turnBlink { 0%, 100% { opacity:1; } 50% { opacity:0.05; } }
+        .blink-btn {
+            position:absolute; top:50%; width:44px; height:44px; border-radius:50%;
+            background:rgba(15,15,15,0.85); border:0.5px solid rgba(255,255,255,0.2);
+            color:#fff; display:none; align-items:center; justify-content:center;
+            cursor:pointer; touch-action:none; pointer-events:auto; z-index:4;
+            box-shadow:0 4px 12px rgba(0,0,0,0.4); font-size:18px; line-height:1;
+        }
+        .blink-btn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
+        .blink-btn.blink-left { left:-52px; }
+        .blink-btn.blink-right { right:-52px; }
+        .panel-open .blink-btn { display:flex; }
     </style>
 </head>
 <body>
@@ -129,6 +154,9 @@ const PIC_FILES = ['car.png', '1.png', '2.png', '3.png', '4.png', '6.png', '7.pn
 
 // Реальный размер изображения на карте в метрах (по высоте)
 const PIC_SIZE_M = 5;
+
+// Диаметр лампочки поворотника в метрах (масштабируется с картой)
+const TURN_IND_SIZE_M = 1;
 
 const userLocSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#007AFF" opacity="0.2"/><circle cx="20" cy="20" r="9" fill="#007AFF" stroke="#fff" stroke-width="2.5"/></svg>`;
 
@@ -356,6 +384,8 @@ function placePic(lat, lon) {
     marker._lon = lon;
     marker._select = el;
     setupTopDrag(marker);
+    setupMarkerLongPress(marker);
+    ensureIndicators(marker);
     updatePicMarker(marker);
     map.addChild(marker);
     placedMarkers.push(marker);
@@ -398,13 +428,96 @@ function setupTopDrag(marker) {
     });
     const stop = () => {
         if (dragging) {
-            marker.update({ draggable: !(drawMode || eraserMode) });
-            map.update({ behaviors: (drawMode || eraserMode) ? [] : appBehaviors });
+            marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
+            map.update({ behaviors: (marker._panelOpen || drawMode || eraserMode) ? [] : appBehaviors });
         }
         dragging = false;
     };
     handle.addEventListener('pointerup', stop);
     handle.addEventListener('pointercancel', stop);
+}
+
+function ensureIndicators(marker) {
+    if (!marker._indicators) {
+        marker._indicators = [];
+        ['turn-left-top', 'turn-left-bottom', 'turn-right-top', 'turn-right-bottom'].forEach(cls => {
+            const ind = document.createElement('div');
+            ind.className = 'turn-indicator ' + cls;
+            marker._rotWrap.appendChild(ind);
+            marker._indicators.push(ind);
+        });
+        updatePicMarker(marker);
+    }
+}
+
+function ensureControlButtons(marker) {
+    if (marker._leftBtn) return;
+    const wrap = marker._rotWrap;
+    const mkBtn = (cls, arrow, side) => {
+        const b = document.createElement('div');
+        b.className = 'blink-btn ' + cls;
+        b.innerHTML = arrow;
+        b.addEventListener('pointerdown', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setBlink(marker, side);
+        });
+        wrap.appendChild(b);
+        return b;
+    };
+    marker._leftBtn = mkBtn('blink-left', '&#9664;', 'left');
+    marker._rightBtn = mkBtn('blink-right', '&#9654;', 'right');
+    updatePicMarker(marker);
+}
+
+function setBlink(marker, side) {
+    ensureIndicators(marker);
+    marker._blinkSide = (marker._blinkSide === side) ? null : side;
+    marker._rotWrap.classList.toggle('signal-left', marker._blinkSide === 'left');
+    marker._rotWrap.classList.toggle('signal-right', marker._blinkSide === 'right');
+    if (marker._leftBtn) marker._leftBtn.classList.toggle('active', marker._blinkSide === 'left');
+    if (marker._rightBtn) marker._rightBtn.classList.toggle('active', marker._blinkSide === 'right');
+}
+
+function anyPanelOpen() {
+    return placedMarkers.some(m => m._panelOpen);
+}
+
+function togglePanel(marker) {
+    ensureControlButtons(marker);
+    marker._panelOpen = !marker._panelOpen;
+    marker._rotWrap.classList.toggle('panel-open', marker._panelOpen);
+    marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
+    map.update({ behaviors: anyPanelOpen() ? [] : appBehaviors });
+}
+
+function setupMarkerLongPress(marker) {
+    const el = marker._select;
+    el.addEventListener('pointerdown', e => {
+        if (e.target.closest && (e.target.closest('.drag-handle') || e.target.closest('.blink-btn'))) return;
+        const lpId = e.pointerId;
+        const sx = e.clientX, sy = e.clientY;
+        let timer = null;
+        const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+        const onMove = ev => {
+            if (ev.pointerId !== lpId) return;
+            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 14) clearTimer();
+        };
+        const end = ev => {
+            if (ev.pointerId !== lpId) return;
+            clearTimer();
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', end);
+            window.removeEventListener('pointercancel', end);
+        };
+        timer = setTimeout(() => {
+            timer = null;
+            togglePanel(marker);
+        }, 500);
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', end);
+        window.addEventListener('pointercancel', end);
+    });
 }
 
 // Метры на пиксель (Web Mercator, тайлы 256px)
@@ -421,7 +534,7 @@ window.addEventListener('pointerdown', e => {
     if (drawMode || eraserMode) return;
     const t = e.target;
     const markerEl = t.closest ? t.closest('.pic-marker') : null;
-    if (markerEl && !(t.closest && t.closest('.drag-handle'))) {
+    if (markerEl && !(t.closest && (t.closest('.drag-handle') || t.closest('.blink-btn')))) {
         if (!firstTouch) {
             const marker = placedMarkers.find(m => m._select === markerEl);
             if (!marker) return;
@@ -467,9 +580,9 @@ const rotEnd = e => {
         const m = lastTouchMarker;
         lastTouchMarker = null;
         if (m && placedMarkers.indexOf(m) !== -1) {
-            m.update({ draggable: true });
+            m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
         }
-        map.update({ behaviors: appBehaviors });
+        if (!anyPanelOpen()) map.update({ behaviors: appBehaviors });
     }
 };
 window.addEventListener('pointerup', rotEnd, true);
@@ -484,6 +597,13 @@ function updatePicMarker(marker) {
     if (!mpp) return;
     marker._img.style.height = (PIC_SIZE_M / mpp) + 'px';
     marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._heading + mapRot}deg)`;
+    if (marker._indicators) {
+        const s = (TURN_IND_SIZE_M / mpp) + 'px';
+        marker._indicators.forEach(ind => {
+            ind.style.width = s;
+            ind.style.height = s;
+        });
+    }
 }
 
 function updateAllPicMarkers(event) {
