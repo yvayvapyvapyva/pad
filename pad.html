@@ -87,17 +87,17 @@
             background:#FFCC00; border-radius:50%; opacity:0; pointer-events:none;
             box-shadow:0 0 10px 3px rgba(255,204,0,0.85);
         }
-        .turn-left-top { left:0; top:0; transform:translate(-50%,-50%); }
-        .turn-left-bottom { left:0; bottom:0; transform:translate(-50%,50%); }
-        .turn-right-top { right:0; top:0; transform:translate(50%,-50%); }
-        .turn-right-bottom { right:0; bottom:0; transform:translate(50%,50%); }
+        .turn-left-top { left:8%; top:8%; transform:translate(-50%,-50%); }
+        .turn-left-bottom { left:8%; bottom:8%; transform:translate(-50%,50%); }
+        .turn-right-top { right:8%; top:8%; transform:translate(50%,-50%); }
+        .turn-right-bottom { right:8%; bottom:8%; transform:translate(50%,50%); }
         .signal-left .turn-left-top, .signal-left .turn-left-bottom,
         .signal-right .turn-right-top, .signal-right .turn-right-bottom {
             animation:turnBlink 0.9s step-end infinite;
         }
         @keyframes turnBlink { 0%, 100% { opacity:1; } 50% { opacity:0.05; } }
         .blink-btn {
-            position:absolute; top:50%; width:44px; height:44px; border-radius:50%;
+            position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:8px;
             background:rgba(15,15,15,0.85); border:0.5px solid rgba(255,255,255,0.2);
             color:#fff; display:none; align-items:center; justify-content:center;
             cursor:pointer; touch-action:none; pointer-events:auto; z-index:4;
@@ -461,6 +461,7 @@ function ensureControlButtons(marker) {
             e.preventDefault();
             e.stopPropagation();
             setBlink(marker, side);
+            if (marker._panelOpen) togglePanel(marker);
         });
         wrap.appendChild(b);
         return b;
