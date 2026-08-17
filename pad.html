@@ -344,6 +344,22 @@ function ptSegDistMeters(p, a, b) {
     return Math.hypot(px - cx, py - cy);
 }
 
+function smoothCoords(coords, iterations = 4) {
+    let pts = coords;
+    for (let it = 0; it < iterations; it++) {
+        if (pts.length < 3) break;
+        const out = [pts[0]];
+        for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[i], p1 = pts[i + 1];
+            out.push([p0[0] * 0.75 + p1[0] * 0.25, p0[1] * 0.75 + p1[1] * 0.25]);
+            out.push([p0[0] * 0.25 + p1[0] * 0.75, p0[1] * 0.25 + p1[1] * 0.75]);
+        }
+        out.push(pts[pts.length - 1]);
+        pts = out;
+    }
+    return pts;
+}
+
 function addDrawPoint(coords, screen) {
     if (screen && lastDrawScreen) {
         const dx = screen[0] - lastDrawScreen[0], dy = screen[1] - lastDrawScreen[1];
@@ -351,14 +367,15 @@ function addDrawPoint(coords, screen) {
     }
     lastDrawScreen = screen || null;
     lineCoords.push(coords);
+    const smooth = smoothCoords(lineCoords);
     if (!drawFeature) {
         drawFeature = new ymaps3.YMapFeature({
-            geometry: { type: 'LineString', coordinates: [coords] },
+            geometry: { type: 'LineString', coordinates: smooth },
             style: { stroke: [{ width: drawWidth, color: drawColor }] }
         });
         map.addChild(drawFeature);
     } else {
-        drawFeature.update({ geometry: { type: 'LineString', coordinates: lineCoords } });
+        drawFeature.update({ geometry: { type: 'LineString', coordinates: smooth } });
     }
 }
 
@@ -725,7 +742,7 @@ function updateAllPicMarkers(event) {
             addDrawPoint(event.coordinates, event.screenCoordinates);
         },
         onPointerUp: () => {
-            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: lineCoords.slice() });
+            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: smoothCoords(lineCoords.slice()) });
             drawing = false;
             drawFeature = null;
             lineCoords = [];
@@ -734,7 +751,7 @@ function updateAllPicMarkers(event) {
             eraserPointerId = null;
         },
         onPointerCancel: () => {
-            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: lineCoords.slice() });
+            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: smoothCoords(lineCoords.slice()) });
             drawing = false;
             drawFeature = null;
             lineCoords = [];
