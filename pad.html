@@ -23,7 +23,8 @@
         #locateBtn { top:calc(12px + env(safe-area-inset-top)); right:12px; }
         #locateBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
         #picPanel {
-            position:fixed; bottom:calc(76px + env(safe-area-inset-bottom)); left:12px; right:12px; z-index:9005;
+            position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:76px;
+            z-index:9005; width:max-content; max-width:calc(100vw - 88px);
             background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.12); border-radius:16px;
             padding:10px; max-height:50vh; overflow-y:auto; display:none;
             box-shadow:0 20px 60px rgba(0,0,0,0.4);
@@ -150,7 +151,7 @@ let drawPointerId = null;
 let eraserPointerId = null;
 
 // Список изображений из папки pic/ — при добавлении новых файлов добавьте их сюда
-const PIC_FILES = ['car.png', '1.png', '2.png', '3.png', '4.png', '6.png', '7.png', '8.png', '9.png', '10.png', '11.png'];
+const PIC_FILES = ['6.png', '7.png', '9.png', '10.png', '11.png'];
 
 // Реальный размер изображения на карте в метрах (по высоте)
 const PIC_SIZE_M = 5;
