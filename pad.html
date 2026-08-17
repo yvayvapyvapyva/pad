@@ -264,9 +264,16 @@ function setMarkersDraggable(v) {
     placedMarkers.forEach(m => { if (placedMarkers.indexOf(m) !== -1) m.update({ draggable: v }); });
 }
 
+function setHandlesVisible(v) {
+    placedMarkers.forEach(m => {
+        if (m._dragHandle) m._dragHandle.style.display = v ? '' : 'none';
+    });
+}
+
 function startDraw() {
     drawMode = true;
     setMarkersDraggable(false);
+    setHandlesVisible(false);
     document.getElementById('drawBtn').classList.add('active');
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
     selectedPic = null;
@@ -279,6 +286,7 @@ function stopDraw() {
     drawing = false;
     drawMode = false;
     setMarkersDraggable(true);
+    setHandlesVisible(true);
     document.getElementById('drawBtn').classList.remove('active');
     document.getElementById('colorPanel').classList.remove('visible');
     document.getElementById('widthSlider').classList.remove('visible');
@@ -291,6 +299,7 @@ function startEraser() {
     eraserMode = true;
     eraserDrag = false;
     setMarkersDraggable(false);
+    setHandlesVisible(false);
     document.getElementById('eraserBtn').classList.add('active');
     document.getElementById('drawBtn').classList.remove('active');
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
@@ -304,6 +313,7 @@ function stopEraser() {
     eraserMode = false;
     eraserDrag = false;
     setMarkersDraggable(true);
+    setHandlesVisible(true);
     document.getElementById('eraserBtn').classList.remove('active');
     map.update({ behaviors: appBehaviors });
 }
@@ -430,6 +440,7 @@ function setupTopDrag(marker) {
     const handle = marker._select.querySelector('.drag-handle');
     let dragging = false, cx = 0, cy = 0;
     handle.addEventListener('pointerdown', e => {
+        if (drawMode || eraserMode) return;
         e.preventDefault();
         e.stopPropagation();
         dragging = true;
