@@ -485,12 +485,16 @@ function anyPanelOpen() {
     return placedMarkers.some(m => m._panelOpen);
 }
 
-function togglePanel(marker) {
+function setPanel(marker, open) {
     ensureControlButtons(marker);
-    marker._panelOpen = !marker._panelOpen;
+    marker._panelOpen = open;
     marker._rotWrap.classList.toggle('panel-open', marker._panelOpen);
     marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
     map.update({ behaviors: anyPanelOpen() ? [] : appBehaviors });
+}
+
+function togglePanel(marker) {
+    setPanel(marker, !marker._panelOpen);
 }
 
 function setupMarkerLongPress(marker) {
@@ -638,6 +642,10 @@ function updateAllPicMarkers(event) {
 
     map.addChild(new YMapListener({
         onPointerDown: (_, event) => {
+            if (anyPanelOpen()) {
+                placedMarkers.forEach(m => { if (m._panelOpen) setPanel(m, false); });
+                return;
+            }
             if (eraserMode) {
                 if (!event?.coordinates) return;
                 eraserPointerId = event.pointerId;
