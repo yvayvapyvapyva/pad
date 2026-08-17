@@ -78,7 +78,7 @@
         .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
         .drag-handle {
             position:absolute; left:50%; top:0; transform:translate(-50%,-50%);
-            width:22px; height:22px; border-radius:50%; display:none; align-items:center; justify-content:center;
+            height:30px; width:30px; border-radius:50%; display:none; align-items:center; justify-content:center;
             background:rgba(0,0,0,0.1);
             cursor:grab; touch-action:none; z-index:3;
         }
@@ -390,6 +390,10 @@ function placePic(lat, lon) {
     }, el);
     marker._img = img;
     marker._rotWrap = wrap;
+    marker._dragHandle = dragHandle;
+    img.onload = () => updatePicMarker(marker);
+    marker._img = img;
+    marker._rotWrap = wrap;
     // Изначальное направление: строго вверх экрана, компенсирует текущий поворот карты
     marker._heading = -mapRot;
     marker._lat = lat;
@@ -642,7 +646,17 @@ function updatePicMarker(marker) {
     if (!marker || !marker._img) return;
     const mpp = metersPerPixel(marker._lat);
     if (!mpp) return;
-    marker._img.style.height = (PIC_SIZE_M / mpp) + 'px';
+    const imgH = PIC_SIZE_M / mpp;
+    marker._img.style.height = imgH + 'px';
+    if (marker._dragHandle) {
+        const imgW = marker._img.naturalWidth && marker._img.naturalHeight
+            ? imgH * marker._img.naturalWidth / marker._img.naturalHeight
+            : marker._img.offsetWidth;
+        if (imgW) {
+            marker._dragHandle.style.width = imgW + 'px';
+            marker._dragHandle.style.height = imgW + 'px';
+        }
+    }
     marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._heading + mapRot}deg)`;
     if (marker._indicators) {
         const s = (TURN_IND_SIZE_M / mpp) + 'px';
