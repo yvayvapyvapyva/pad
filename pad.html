@@ -158,6 +158,8 @@ let drawColor = '#000000';
 let drawWidth = 5;
 let drawPointerId = null;
 let eraserPointerId = null;
+let eraserLongPress = null;
+let eraserLongPressFired = false;
 
 // Список изображений из папки pic/ — при добавлении новых файлов добавьте их сюда
 const PIC_FILES = ['6.png', '7.png', '9.png', '10.png', '11.png'];
@@ -498,6 +500,19 @@ function removeMarker(marker) {
     if (idx !== -1) placedMarkers.splice(idx, 1);
 }
 
+function clearEverything() {
+    if (drawMode) stopDraw();
+    if (eraserMode) stopEraser();
+    drawing = false;
+    drawFeature = null;
+    lineCoords = [];
+    lastDrawScreen = null;
+    drawnLines.forEach(line => { if (line.feature) map.removeChild(line.feature); });
+    drawnLines = [];
+    placedMarkers.slice().forEach(m => removeMarker(m));
+    document.getElementById('picPanel').classList.remove('visible');
+}
+
 function setBlink(marker, side) {
     ensureIndicators(marker);
     marker._blinkSide = (marker._blinkSide === side) ? null : side;
@@ -725,7 +740,23 @@ function updateAllPicMarkers(event) {
         }
     });
 
+    document.getElementById('eraserBtn').addEventListener('pointerdown', () => {
+        eraserLongPressFired = false;
+        eraserLongPress = setTimeout(() => {
+            eraserLongPressFired = true;
+            clearEverything();
+        }, 1000);
+    });
+    const cancelEraserLongPress = () => {
+        if (eraserLongPress) { clearTimeout(eraserLongPress); eraserLongPress = null; }
+    };
+    document.getElementById('eraserBtn').addEventListener('pointerup', cancelEraserLongPress);
+    document.getElementById('eraserBtn').addEventListener('pointercancel', cancelEraserLongPress);
     document.getElementById('eraserBtn').addEventListener('click', () => {
+        if (eraserLongPressFired) {
+            eraserLongPressFired = false;
+            return;
+        }
         if (eraserMode) {
             stopEraser();
         } else {
