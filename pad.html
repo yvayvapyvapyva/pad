@@ -108,6 +108,15 @@
         .blink-btn.blink-left { left:-52px; }
         .blink-btn.blink-right { right:-52px; }
         .panel-open .blink-btn { display:flex; }
+        .delete-btn {
+            position:absolute; top:calc(100% + 10px); left:50%; transform:translateX(-50%);
+            width:34px; height:34px; border-radius:50%;
+            background:rgba(255,69,58,0.9); border:1px solid rgba(255,255,255,0.35);
+            color:#fff; display:none; align-items:center; justify-content:center;
+            cursor:pointer; touch-action:none; pointer-events:auto; z-index:4;
+            box-shadow:0 4px 12px rgba(0,0,0,0.4); font-size:16px; line-height:1;
+        }
+        .panel-open .delete-btn { display:flex; }
     </style>
 </head>
 <body>
@@ -469,7 +478,24 @@ function ensureControlButtons(marker) {
     };
     marker._leftBtn = mkBtn('blink-left', '&#9664;', 'left');
     marker._rightBtn = mkBtn('blink-right', '&#9654;', 'right');
+    const del = document.createElement('div');
+    del.className = 'delete-btn';
+    del.innerHTML = '&#10005;';
+    del.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        removeMarker(marker);
+    });
+    wrap.appendChild(del);
+    marker._deleteBtn = del;
     updatePicMarker(marker);
+}
+
+function removeMarker(marker) {
+    if (marker._panelOpen) setPanel(marker, false);
+    map.removeChild(marker);
+    const idx = placedMarkers.indexOf(marker);
+    if (idx !== -1) placedMarkers.splice(idx, 1);
 }
 
 function setBlink(marker, side) {
@@ -500,7 +526,7 @@ function togglePanel(marker) {
 function setupMarkerLongPress(marker) {
     const el = marker._select;
     el.addEventListener('pointerdown', e => {
-        if (e.target.closest && (e.target.closest('.drag-handle') || e.target.closest('.blink-btn'))) return;
+        if (e.target.closest && (e.target.closest('.drag-handle') || e.target.closest('.blink-btn') || e.target.closest('.delete-btn'))) return;
         const lpId = e.pointerId;
         const sx = e.clientX, sy = e.clientY;
         let timer = null;
@@ -540,7 +566,7 @@ window.addEventListener('pointerdown', e => {
     if (drawMode || eraserMode) return;
     const t = e.target;
     const markerEl = t.closest ? t.closest('.pic-marker') : null;
-    if (markerEl && !(t.closest && (t.closest('.drag-handle') || t.closest('.blink-btn')))) {
+    if (markerEl && !(t.closest && (t.closest('.drag-handle') || t.closest('.blink-btn') || t.closest('.delete-btn')))) {
         if (!firstTouch) {
             const marker = placedMarkers.find(m => m._select === markerEl);
             if (!marker) return;
