@@ -19,7 +19,8 @@
         .fab.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
         #drawBtn { top:calc(12px + env(safe-area-inset-top)); left:12px; }
         #eraserBtn { top:calc(12px + env(safe-area-inset-top)); left:76px; }
-        #addPicBtn { bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; }
+        #addPicBtn { bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; border-radius:12px; overflow:hidden; }
+        #addPicBtn img { width:100%; height:100%; object-fit:contain; padding:5px; border-radius:10px; pointer-events:none; box-sizing:border-box; }
         #locateBtn { top:calc(76px + env(safe-area-inset-top)); right:12px; }
         #locateBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
         #rotateBtn {
@@ -175,7 +176,7 @@
 <div id="loading"><div class="spinner"></div></div>
 <div id="map"></div>
 <button id="addPicBtn" class="fab">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M3 6h18v2.5H3V6zm0 4.75h18v2.5H3v-2.5zM3 15.5h18V18H3v-2.5z"/></svg>
+    <img id="addPicThumb" alt="">
 </button>
 <button id="drawBtn" class="fab">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
@@ -636,6 +637,7 @@ function clearEverything() {
     drawnLines = [];
     placedMarkers.slice().forEach(m => removeMarker(m));
     document.getElementById('picPanel').classList.remove('visible');
+    document.getElementById('addPicBtn').classList.remove('open');
 }
 
 function setBlink(marker, side) {
@@ -871,6 +873,7 @@ function updateAllPicMarkers(event) {
         } else {
             if (eraserMode) stopEraser();
             document.getElementById('picPanel').classList.remove('visible');
+            document.getElementById('addPicBtn').classList.remove('open');
             startDraw();
         }
     });
@@ -897,6 +900,7 @@ function updateAllPicMarkers(event) {
         } else {
             if (drawMode) stopDraw();
             document.getElementById('picPanel').classList.remove('visible');
+            document.getElementById('addPicBtn').classList.remove('open');
             startEraser();
         }
     });
@@ -1052,10 +1056,12 @@ function updateAllPicMarkers(event) {
         if (eraserMode) stopEraser();
         const panel = document.getElementById('picPanel');
         panel.classList.toggle('visible');
+        document.getElementById('addPicBtn').classList.toggle('open', panel.classList.contains('visible'));
         if (panel.classList.contains('visible')) buildPicGrid();
     });
 
     buildPicGrid();
+    document.getElementById('addPicThumb').src = 'pic/' + encodeURIComponent(PIC_FILES[0]);
     document.querySelector('.color-btn[data-color="#000000"]').classList.add('active');
     document.getElementById('loading').classList.add('hidden');
 })();
