@@ -43,19 +43,25 @@
         #pddBtn:active { transform:translateX(-50%) scale(0.92); }
         #pddBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
         #pddModal {
-            position:fixed; inset:0; z-index:9100; background:rgba(10,10,10,0.94);
-            display:none; flex-direction:column; color:#fff;
-            padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+            position:fixed; left:0; right:0; bottom:0; height:40vh; max-height:100vh; z-index:9100;
+            background:rgba(15,15,15,0.97); color:#fff;
+            display:flex; flex-direction:column;
+            border-radius:16px 16px 0 0; border-top:0.5px solid rgba(255,255,255,0.12);
+            box-shadow:0 -8px 32px rgba(0,0,0,0.4);
+            padding-bottom:env(safe-area-inset-bottom);
+            transform:translateY(105%); visibility:hidden;
+            transition:transform .3s ease, visibility .3s;
         }
-        #pddModal.visible { display:flex; }
+        #pddModal.visible { transform:translateY(0); visibility:visible; }
         .pdd-header {
             display:flex; align-items:center; gap:8px;
-            padding:12px; border-bottom:0.5px solid rgba(255,255,255,0.12); flex-shrink:0;
+            padding:8px 10px; border-bottom:0.5px solid rgba(255,255,255,0.12); flex-shrink:0;
+            touch-action:none; user-select:none; -webkit-user-select:none;
         }
-        #pddTitle { font-size:17px; font-weight:600; flex:1; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        #pddTitle { font-size:15px; font-weight:600; flex:1; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .pdd-nav {
-            width:40px; height:40px; border-radius:50%; border:0.5px solid rgba(255,255,255,0.12);
-            background:rgba(255,255,255,0.06); color:#fff; font-size:20px; cursor:pointer;
+            width:30px; height:30px; border-radius:50%; border:0.5px solid rgba(255,255,255,0.12);
+            background:rgba(255,255,255,0.06); color:#fff; font-size:15px; cursor:pointer;
             display:flex; align-items:center; justify-content:center; touch-action:manipulation; flex-shrink:0;
         }
         .pdd-nav:active { background:rgba(255,255,255,0.15); }
@@ -1018,6 +1024,24 @@ function updateAllPicMarkers(event) {
         if (pddStack.length > 1) { pddStack.pop(); pddRender(); }
         else togglePdd();
     });
+
+    const pddHeader = document.querySelector('.pdd-header');
+    let pddDrag = null;
+    pddHeader.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.pdd-nav')) return;
+        pddDrag = { startY: e.clientY, startH: pddModal.offsetHeight };
+        pddHeader.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    });
+    pddHeader.addEventListener('pointermove', (e) => {
+        if (!pddDrag) return;
+        const h = pddDrag.startH + (pddDrag.startY - e.clientY);
+        const vh = window.innerHeight;
+        pddModal.style.height = Math.min(vh, Math.max(vh * 0.25, h)) + 'px';
+    });
+    const endPddDrag = () => { pddDrag = null; };
+    pddHeader.addEventListener('pointerup', endPddDrag);
+    pddHeader.addEventListener('pointercancel', endPddDrag);
 
     document.getElementById('addPicBtn').addEventListener('click', () => {
         if (drawMode) stopDraw();
