@@ -928,7 +928,7 @@ function updateAllPicMarkers(event) {
         map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
     });
 
-    const ROTATE_STEP = 10 * Math.PI / 180;
+    const ROTATE_STEP = 5 * Math.PI / 180;
     const ROTATE_HOLD_STEP = 1 * Math.PI / 180;
     const ROTATE_HOLD_MS = 1000;
     const ROTATE_HOLD_INTERVAL = 100;
