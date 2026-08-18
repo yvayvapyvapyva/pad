@@ -22,6 +22,18 @@
         #addPicBtn { bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; }
         #locateBtn { top:calc(12px + env(safe-area-inset-top)); right:12px; }
         #locateBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
+        #rotateBtn {
+            position:fixed; top:calc(76px + env(safe-area-inset-top)); right:12px;
+            z-index:9005; display:flex; flex-direction:row; overflow:hidden;
+            background:rgba(15,15,15,0.75); border:0.5px solid rgba(255,255,255,0.12); border-radius:52px;
+            box-shadow:0 8px 32px rgba(0,0,0,0.3); touch-action:manipulation;
+        }
+        #rotateBtn .rot-btn {
+            width:46px; height:52px; border:none; background:transparent; color:#fff; cursor:pointer;
+            display:flex; align-items:center; justify-content:center; padding:0;
+        }
+        #rotateBtn .rot-btn:active { background:rgba(255,255,255,0.15); }
+        #rotateBtn .rot-btn + .rot-btn { border-left:0.5px solid rgba(255,255,255,0.12); }
         #picPanel {
             position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:76px;
             z-index:9005; width:max-content; max-width:calc(100vw - 88px);
@@ -135,6 +147,14 @@
 <button id="locateBtn" class="fab">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
 </button>
+<div id="rotateBtn">
+    <button class="rot-btn" id="rotCCWBtn" title="Против часовой стрелки">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M7.11 8.53 5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg>
+    </button>
+    <button class="rot-btn" id="rotCWBtn" title="По часовой стрелке">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" style="transform:scaleX(-1)"><path d="M7.11 8.53 5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg>
+    </button>
+</div>
 <div id="picPanel" class="visible">
     <div id="picGrid"></div>
 </div>
@@ -847,6 +867,51 @@ function updateAllPicMarkers(event) {
         if (!lastPos) return;
         map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
     });
+
+    const ROTATE_STEP = 10 * Math.PI / 180;
+    const ROTATE_HOLD_STEP = 1 * Math.PI / 180;
+    const ROTATE_HOLD_MS = 1000;
+    const ROTATE_HOLD_INTERVAL = 100;
+
+    function setupRotateBtn(btnId, dir) {
+        const btn = document.getElementById(btnId);
+        let holdTimer = null;
+        let longFired = false;
+        let raf = null;
+
+        const rotateBy = (angle, duration) => map.update({ camera: { azimuth: map.azimuth + dir * angle, duration } });
+
+        const spin = () => {
+            rotateBy(ROTATE_HOLD_STEP, 100);
+            raf = setTimeout(spin, ROTATE_HOLD_INTERVAL);
+        };
+
+        btn.addEventListener('pointerdown', () => {
+            longFired = false;
+            holdTimer = setTimeout(() => {
+                longFired = true;
+                spin();
+            }, ROTATE_HOLD_MS);
+        });
+
+        const stop = () => {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            clearTimeout(raf);
+            raf = null;
+        };
+
+        btn.addEventListener('pointerup', stop);
+        btn.addEventListener('pointercancel', stop);
+
+        btn.addEventListener('click', () => {
+            if (longFired) { longFired = false; return; }
+            rotateBy(ROTATE_STEP, 200);
+        });
+    }
+
+    setupRotateBtn('rotCCWBtn', -1);
+    setupRotateBtn('rotCWBtn', +1);
 
     document.getElementById('addPicBtn').addEventListener('click', () => {
         if (drawMode) stopDraw();
