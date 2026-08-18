@@ -456,6 +456,11 @@ function smoothCoords(coords, iterations = 4) {
     return pts;
 }
 
+function hexToRgba(hex, alpha) {
+    const n = parseInt(hex.replace('#', ''), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ', ' + alpha + ')';
+}
+
 function addDrawPoint(coords, screen) {
     if (screen && lastDrawScreen) {
         const dx = screen[0] - lastDrawScreen[0], dy = screen[1] - lastDrawScreen[1];
@@ -467,7 +472,7 @@ function addDrawPoint(coords, screen) {
     if (!drawFeature) {
         drawFeature = new ymaps3.YMapFeature({
             geometry: { type: 'LineString', coordinates: smooth },
-            style: { stroke: [{ width: drawWidth, color: drawColor }] }
+            style: { stroke: [{ width: drawWidth, color: hexToRgba(drawColor, 0.7) }] }
         });
         map.addChild(drawFeature);
     } else {
