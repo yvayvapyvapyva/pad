@@ -79,7 +79,7 @@
         .drag-handle {
             position:absolute; left:50%; top:0; transform:translate(-50%,-50%);
             height:30px; width:30px; border-radius:50%; display:none; align-items:center; justify-content:center;
-            background:rgba(0,0,0,0.1);
+            background:rgba(0,0,0,0.05);
             cursor:grab; touch-action:none; z-index:3;
         }
         .pic-marker .drag-handle { display:flex; }
@@ -203,30 +203,40 @@ let picGhost = null;
 
 function startPicDrag(cell, e) {
     e.preventDefault();
-    picDrag = { id: e.pointerId, item: cell, startX: e.clientX, startY: e.clientY, active: false };
+    picDrag = { id: e.pointerId, item: cell, startX: e.clientX, startY: e.clientY, active: false, angle: null, prev: null };
 }
 
 window.addEventListener('pointermove', e => {
     if (!picDrag || e.pointerId !== picDrag.id) return;
     const dx = e.clientX - picDrag.startX, dy = e.clientY - picDrag.startY;
+    if (picDrag.prev) {
+        const mx = e.clientX - picDrag.prev.x, my = e.clientY - picDrag.prev.y;
+        if (mx * mx + my * my >= 4) picDrag.angle = Math.atan2(my, mx);
+    }
+    picDrag.prev = { x: e.clientX, y: e.clientY };
     if (!picDrag.active) {
         if (dx * dx + dy * dy < 49) return;
         picDrag.active = true;
         selectedPic = picDrag.item.dataset.file;
         picGhost = document.createElement('img');
         picGhost.src = 'pic/' + encodeURIComponent(selectedPic);
-        picGhost.style.cssText = 'position:fixed;left:0;top:0;height:72px;width:auto;max-width:96px;max-height:72px;object-fit:contain;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
+        picGhost.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
         document.body.appendChild(picGhost);
     }
     if (picGhost) {
         picGhost.style.left = e.clientX + 'px';
         picGhost.style.top = e.clientY + 'px';
+        const geo = screenToGeo(e.clientX, e.clientY);
+        picGhost.style.height = (PIC_SIZE_M / metersPerPixel(geo.lat)) + 'px';
+        picGhost.style.transform = 'translate(-50%,-50%)' + (picDrag.angle != null ? ' rotate(' + (picDrag.angle * 180 / Math.PI + 90) + 'deg)' : '');
     }
 }, true);
 
 function endPicDrag(e) {
     if (!picDrag || e.pointerId !== picDrag.id) return;
     const active = picDrag.active;
+    let angle = picDrag.angle;
+    if (angle == null) angle = Math.atan2(e.clientY - picDrag.startY, e.clientX - picDrag.startX);
     picDrag = null;
     if (picGhost) { picGhost.remove(); picGhost = null; }
     if (!active) return;
@@ -234,7 +244,7 @@ function endPicDrag(e) {
     const rect = mapEl.getBoundingClientRect();
     if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
         const geo = screenToGeo(e.clientX, e.clientY);
-        placePic(geo.lat, geo.lon);
+        placePic(geo.lat, geo.lon, angle);
     } else {
         selectedPic = null;
     }
@@ -389,7 +399,7 @@ function addDrawPoint(coords, screen) {
     }
 }
 
-function placePic(lat, lon) {
+function placePic(lat, lon, moveAngle) {
     if (!selectedPic) return;
     const el = document.createElement('div');
     el.className = 'pic-marker';
@@ -422,7 +432,9 @@ function placePic(lat, lon) {
     marker._img = img;
     marker._rotWrap = wrap;
     // Изначальное направление: строго вверх экрана, компенсирует текущий поворот карты
-    marker._heading = -mapRot;
+    marker._heading = (moveAngle != null)
+        ? moveAngle * 180 / Math.PI + 90 - mapRot
+        : -mapRot;
     marker._lat = lat;
     marker._lon = lon;
     marker._select = el;
