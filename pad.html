@@ -1041,7 +1041,7 @@ function updateAllPicMarkers(event) {
         if (!pddDrag) return;
         const h = pddDrag.startH + (pddDrag.startY - e.clientY);
         const vh = window.innerHeight;
-        pddModal.style.height = Math.min(vh, Math.max(vh * 0.25, h)) + 'px';
+        pddModal.style.height = Math.min(vh, Math.max(vh * 0.15, h)) + 'px';
     });
     const endPddDrag = () => { pddDrag = null; };
     pddHeader.addEventListener('pointerup', endPddDrag);
