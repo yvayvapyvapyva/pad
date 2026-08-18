@@ -203,18 +203,13 @@ let picGhost = null;
 
 function startPicDrag(cell, e) {
     e.preventDefault();
-    picDrag = { id: e.pointerId, item: cell, startX: e.clientX, startY: e.clientY, active: false, angle: null, prev: null };
+    picDrag = { id: e.pointerId, item: cell, startX: e.clientX, startY: e.clientY, active: false, angle: null, cx: 0, cy: 0, h: 0 };
 }
 
 window.addEventListener('pointermove', e => {
     if (!picDrag || e.pointerId !== picDrag.id) return;
-    const dx = e.clientX - picDrag.startX, dy = e.clientY - picDrag.startY;
-    if (picDrag.prev) {
-        const mx = e.clientX - picDrag.prev.x, my = e.clientY - picDrag.prev.y;
-        if (mx * mx + my * my >= 4) picDrag.angle = Math.atan2(my, mx);
-    }
-    picDrag.prev = { x: e.clientX, y: e.clientY };
     if (!picDrag.active) {
+        const dx = e.clientX - picDrag.startX, dy = e.clientY - picDrag.startY;
         if (dx * dx + dy * dy < 49) return;
         picDrag.active = true;
         selectedPic = picDrag.item.dataset.file;
@@ -222,12 +217,23 @@ window.addEventListener('pointermove', e => {
         picGhost.src = 'pic/' + encodeURIComponent(selectedPic);
         picGhost.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
         document.body.appendChild(picGhost);
+        const geo = screenToGeo(e.clientX, e.clientY);
+        picDrag.h = PIC_SIZE_M / metersPerPixel(geo.lat) / 2;
+        picDrag.cx = e.clientX;
+        picDrag.cy = e.clientY + picDrag.h;
+        picDrag.angle = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
+    } else if (picGhost) {
+        const cGeo = screenToGeo(picDrag.cx, picDrag.cy);
+        picDrag.h = PIC_SIZE_M / metersPerPixel(cGeo.lat) / 2;
+        const ang = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
+        picDrag.angle = ang;
+        picDrag.cx = e.clientX - Math.cos(ang) * picDrag.h;
+        picDrag.cy = e.clientY - Math.sin(ang) * picDrag.h;
     }
     if (picGhost) {
-        picGhost.style.left = e.clientX + 'px';
-        picGhost.style.top = e.clientY + 'px';
-        const geo = screenToGeo(e.clientX, e.clientY);
-        picGhost.style.height = (PIC_SIZE_M / metersPerPixel(geo.lat)) + 'px';
+        picGhost.style.height = (2 * picDrag.h) + 'px';
+        picGhost.style.left = picDrag.cx + 'px';
+        picGhost.style.top = picDrag.cy + 'px';
         picGhost.style.transform = 'translate(-50%,-50%)' + (picDrag.angle != null ? ' rotate(' + (picDrag.angle * 180 / Math.PI + 90) + 'deg)' : '');
     }
 }, true);
@@ -236,6 +242,7 @@ function endPicDrag(e) {
     if (!picDrag || e.pointerId !== picDrag.id) return;
     const active = picDrag.active;
     let angle = picDrag.angle;
+    const cx = picDrag.cx, cy = picDrag.cy;
     if (angle == null) angle = Math.atan2(e.clientY - picDrag.startY, e.clientX - picDrag.startX);
     picDrag = null;
     if (picGhost) { picGhost.remove(); picGhost = null; }
@@ -243,7 +250,7 @@ function endPicDrag(e) {
     const mapEl = document.getElementById('map');
     const rect = mapEl.getBoundingClientRect();
     if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        const geo = screenToGeo(e.clientX, e.clientY);
+        const geo = screenToGeo(cx, cy);
         placePic(geo.lat, geo.lon, angle);
     } else {
         selectedPic = null;
