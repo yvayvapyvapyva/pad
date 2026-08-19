@@ -168,7 +168,7 @@
 
     function endPhase(m) {
         if (!m._samples || m._samples.length < 2) return 0;
-        return (m._phaseOffset || 0) + endTrim(m);
+        return (m._phaseOffset || 0) + (endTrim(m) - startTrim(m));
     }
 
     function maxDurOf(cars) {
@@ -176,15 +176,17 @@
     }
 
     // Применить состояние машинки на момент времени elapsed (мс) цикла.
-    // Время отсчитывается от фазы (phaseOffset) начала записи машинки; движение
-    // ограничено отрезком записи [startTrim, endTrim] — до и после него машинка
-    // держит позицию на границе отрезка.
+    // Отрезок записи [startTrim, endTrim] заполняет собой весь цикл машинки:
+    // на elapsed=0 машинка находится в точке startTrim и движется к endTrim к концу
+    // своего отрезка, затем цикл повторяется — без паузы перед перезапуском.
+    // Для машинок, записанных во время воспроизведения (phaseOffset > 0), движение
+    // начинается с фазы phaseOffset и до неё машинка держит позицию startTrim.
     function sampleAt(marker, elapsed) {
         const s = marker._samples;
         if (!s || s.length < 2) return;
-        let e = elapsed - (marker._phaseOffset || 0);
         const st = startTrim(marker);
         const et = endTrim(marker);
+        let e = st + (elapsed - (marker._phaseOffset || 0));
         if (e < st) e = st;
         else if (e > et) e = et;
         const t0 = s[0].t;
@@ -316,7 +318,7 @@
         placedMarkers.forEach(m => {
             if (!m._playing) return;
             m._playing = false;
-            sampleAt(m, startTrim(m) + (m._phaseOffset || 0)); // вернуть на отсечённое начало
+            sampleAt(m, m._phaseOffset || 0); // вернуть на отсечённое начало
             m._select.style.pointerEvents = '';
             m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
         });
@@ -341,7 +343,7 @@
 
     // ---- Окно перемотки (долгое нажатие на PLAY) ----
     function scrubTo(marker, t) {
-        sampleAt(marker, t + (marker._phaseOffset || 0));
+        sampleAt(marker, t - startTrim(marker) + (marker._phaseOffset || 0));
     }
 
     function fmtTime(ms) {
