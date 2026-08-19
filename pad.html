@@ -67,7 +67,9 @@
             display:flex; align-items:center; justify-content:center; touch-action:manipulation; flex-shrink:0;
         }
         .pdd-nav:active { background:rgba(255,255,255,0.15); }
-        .pdd-search { padding:8px 10px; border-bottom:0.5px solid rgba(255,255,255,0.12); flex-shrink:0; background:rgba(255,255,255,0.02); }
+        .pdd-nav.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
+        .pdd-search { display:none; padding:8px 10px; border-bottom:0.5px solid rgba(255,255,255,0.12); flex-shrink:0; background:rgba(255,255,255,0.02); }
+        .pdd-search.visible { display:block; }
         #pddSearch {
             width:100%; height:36px; padding:0 12px; border-radius:18px; border:0.5px solid rgba(255,255,255,0.18);
             background:rgba(255,255,255,0.08); color:#fff; font-size:15px; outline:none; touch-action:manipulation;
@@ -206,6 +208,9 @@
     <div class="pdd-header">
         <button id="pddBack" class="pdd-nav">&#8592;</button>
         <div id="pddTitle">ПДД РФ</div>
+        <button id="pddSearchBtn" class="pdd-nav" title="Поиск">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="#fff"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        </button>
         <button id="pddClose" class="pdd-nav">&#10005;</button>
     </div>
     <div class="pdd-search">
@@ -1031,6 +1036,12 @@ function updateAllPicMarkers(event) {
         return s;
     }
 
+    function pddHighlightFull(text, query) {
+        let s = escapeHtml(text);
+        if (query) s = s.replace(new RegExp('(' + escapeRegExp(query) + ')', 'gi'), '<mark>$1</mark>');
+        return s;
+    }
+
     function pddRender() {
         const body = document.getElementById('pddBody');
         const v = pddStack[pddStack.length - 1];
@@ -1091,7 +1102,7 @@ function updateAllPicMarkers(event) {
                         prev.innerHTML = pddSnippet(entry.text, v.query);
                         row.appendChild(num);
                         row.appendChild(prev);
-                        row.addEventListener('click', () => { pddStack.push({ type: 'text', sec, entry }); pddRender(); });
+                        row.addEventListener('click', () => { pddStack.push({ type: 'text', sec, entry, query: v.query }); pddRender(); });
                         body.appendChild(row);
                     });
                 });
@@ -1099,8 +1110,17 @@ function updateAllPicMarkers(event) {
         } else {
             const t = document.createElement('div');
             t.className = 'pdd-text';
-            t.textContent = v.entry.text;
-            body.appendChild(t);
+            if (v.query) {
+                t.innerHTML = pddHighlightFull(v.entry.text, v.query);
+                body.appendChild(t);
+                requestAnimationFrame(() => {
+                    const mark = t.querySelector('mark');
+                    if (mark) mark.scrollIntoView({ block: 'center' });
+                });
+            } else {
+                t.textContent = v.entry.text;
+                body.appendChild(t);
+            }
         }
         body.scrollTop = 0;
     }
@@ -1112,18 +1132,35 @@ function updateAllPicMarkers(event) {
         pddModal.classList.toggle('visible', open);
         pddBtn.classList.toggle('active', open);
         document.body.classList.toggle('pdd-open', open);
-        if (open) { pddStack = [{ type: 'sections' }]; document.getElementById('pddSearch').value = ''; pddRender(); }
+        if (open) { pddStack = [{ type: 'sections' }]; document.getElementById('pddSearch').value = ''; setSearchVisible(false); pddRender(); }
         placeGalleryAbove();
     };
     pddBtn.addEventListener('click', togglePdd);
     document.getElementById('pddClose').addEventListener('click', togglePdd);
     document.getElementById('pddBack').addEventListener('click', () => {
-        if (pddStack[pddStack.length - 1].type === 'search') document.getElementById('pddSearch').value = '';
+        if (pddStack[pddStack.length - 1].type === 'search') { exitSearch(); return; }
         if (pddStack.length > 1) { pddStack.pop(); pddRender(); }
         else togglePdd();
     });
 
     const pddSearchInput = document.getElementById('pddSearch');
+    const pddSearchBox = document.querySelector('.pdd-search');
+    const pddSearchBtn = document.getElementById('pddSearchBtn');
+    const setSearchVisible = (v) => {
+        pddSearchBox.classList.toggle('visible', v);
+        pddSearchBtn.classList.toggle('active', v);
+        if (v) pddSearchInput.focus();
+    };
+    const exitSearch = () => {
+        pddSearchInput.value = '';
+        setSearchVisible(false);
+        const si = pddStack.findIndex(x => x.type === 'search');
+        if (si !== -1) { pddStack = pddStack.slice(0, si); pddRender(); }
+    };
+    pddSearchBtn.addEventListener('click', () => {
+        if (pddSearchBox.classList.contains('visible')) exitSearch();
+        else setSearchVisible(true);
+    });
     pddSearchInput.addEventListener('input', () => {
         const q = pddSearchInput.value.trim().replace(/\s+/g, ' ');
         const top = pddStack[pddStack.length - 1];
