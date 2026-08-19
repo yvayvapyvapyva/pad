@@ -67,6 +67,31 @@
         .scrub-thumb {
             width:36px; height:36px; object-fit:contain; flex-shrink:0; pointer-events:none;
         }
+        .scrub-del-btn {
+            width:26px; height:26px; border-radius:50%; flex-shrink:0;
+            background:rgba(255,69,58,0.9); border:0.5px solid rgba(255,255,255,0.2);
+            color:#fff; font-size:14px; line-height:1;
+            display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:manipulation;
+        }
+        .scrub-del-btn:active { background:rgba(255,69,58,1); }
+        #scrubConfirm {
+            position:fixed; inset:0; z-index:9300; display:flex; align-items:center; justify-content:center;
+            background:rgba(0,0,0,0.45); opacity:0; visibility:hidden; transition:opacity .2s ease, visibility .2s;
+        }
+        #scrubConfirm.visible { opacity:1; visibility:visible; }
+        .scrub-confirm-box {
+            width:min(300px, 80vw); background:rgba(15,15,15,0.98); border:0.5px solid rgba(255,255,255,0.12);
+            border-radius:16px; padding:16px; text-align:center;
+            box-shadow:0 16px 48px rgba(0,0,0,0.5);
+        }
+        .scrub-confirm-btns { display:flex; flex-direction:column; gap:8px; }
+        .scrub-confirm-btns .scrub-confirm-btn {
+            height:44px; border-radius:12px; border:0.5px solid rgba(255,255,255,0.12);
+            background:rgba(255,255,255,0.08); color:#fff; font-size:16px; font-weight:600;
+            cursor:pointer; display:flex; align-items:center; justify-content:center; touch-action:manipulation;
+        }
+        .scrub-confirm-btns .scrub-confirm-btn:active { background:rgba(255,255,255,0.15); }
+        .scrub-confirm-btns .scrub-confirm-yes { background:rgba(255,69,58,0.9); border-color:transparent; }
         .scrub-time { flex-shrink:0; width:64px; font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; }
         .scrub-dual { position:relative; flex:1; min-width:0; height:22px; touch-action:manipulation; }
         .scrub-dual::before {
@@ -119,6 +144,7 @@
     let _scrubOpen = false;
     let _scrubTimer = null;
     let _suppressClick = false;
+    let _confirmMarker = null;
 
     const scrubModal = document.createElement('div');
     scrubModal.id = 'scrubModal';
@@ -137,6 +163,23 @@
     scrubModal.appendChild(scrubHeader);
     scrubModal.appendChild(scrubBody);
     document.body.appendChild(scrubModal);
+    const confirmModal = document.createElement('div');
+    confirmModal.id = 'scrubConfirm';
+    const confirmBox = document.createElement('div');
+    confirmBox.className = 'scrub-confirm-box';
+    const confirmBtns = document.createElement('div');
+    confirmBtns.className = 'scrub-confirm-btns';
+    const confirmYes = document.createElement('div');
+    confirmYes.className = 'scrub-confirm-btn scrub-confirm-yes';
+    confirmYes.textContent = 'Удалить';
+    const confirmNo = document.createElement('div');
+    confirmNo.className = 'scrub-confirm-btn';
+    confirmNo.textContent = 'Отмена';
+    confirmBtns.appendChild(confirmYes);
+    confirmBtns.appendChild(confirmNo);
+    confirmBox.appendChild(confirmBtns);
+    confirmModal.appendChild(confirmBox);
+    document.body.appendChild(confirmModal);
 
     // ---- Утилиты ----
     function lerpAngle(a, b, t) {
@@ -355,6 +398,31 @@
         if (_recOn) stopRec();
         if (_playAll) stopAll();
         _scrubOpen = true;
+        buildScrubRows();
+        scrubModal.classList.add('visible');
+    }
+
+    function showConfirm(marker) {
+        _confirmMarker = marker;
+        confirmModal.classList.add('visible');
+    }
+
+    function hideConfirm() {
+        _confirmMarker = null;
+        confirmModal.classList.remove('visible');
+    }
+
+    function deleteRecording(marker) {
+        marker._samples = [];
+        marker._startTrim = 0;
+        marker._endTrim = undefined;
+        marker._phaseOffset = 0;
+        if (_scrubOpen) buildScrubRows();
+        updatePlayAllBtn();
+    }
+
+    function buildScrubRows() {
+        hideConfirm();
         scrubBody.textContent = '';
         const cars = playables();
         if (!cars.length) {
@@ -362,81 +430,93 @@
             empty.className = 'scrub-empty';
             empty.textContent = 'Нет записей';
             scrubBody.appendChild(empty);
-        } else {
-            cars.forEach(marker => {
-                const dur = marker._samples[marker._samples.length - 1].t;
-                if (marker._startTrim == null) marker._startTrim = 0;
-                if (marker._endTrim == null) marker._endTrim = dur;
-                const row = document.createElement('div');
-                row.className = 'scrub-row';
-                const thumb = document.createElement('img');
-                thumb.className = 'scrub-thumb';
-                thumb.src = marker._img ? marker._img.src : '';
-                const time = document.createElement('div');
-                time.className = 'scrub-time';
-                const dual = document.createElement('div');
-                dual.className = 'scrub-dual';
-                const active = document.createElement('div');
-                active.className = 'scrub-active';
-                dual.appendChild(active);
-                const start = document.createElement('input');
-                start.type = 'range';
-                start.className = 'scrub-range scrub-start';
-                const end = document.createElement('input');
-                end.type = 'range';
-                end.className = 'scrub-range scrub-end';
-                dual.appendChild(start);
-                dual.appendChild(end);
-                row.appendChild(thumb);
-                row.appendChild(time);
-                row.appendChild(dual);
-                scrubBody.appendChild(row);
-
-                const refresh = () => {
-                    const p1 = (marker._startTrim / dur) * 100;
-                    const p2 = (marker._endTrim / dur) * 100;
-                    active.style.left = p1 + '%';
-                    active.style.width = (p2 - p1) + '%';
-                    time.textContent = fmtTime(marker._startTrim) + '–' + fmtTime(marker._endTrim);
-                };
-                const sync = isStart => {
-                    if (isStart) {
-                        marker._startTrim = (start.value / 1000) * dur;
-                        if (marker._startTrim > marker._endTrim) {
-                            marker._startTrim = marker._endTrim;
-                            start.value = (marker._endTrim / dur) * 1000;
-                        }
-                        scrubTo(marker, marker._startTrim);
-                    } else {
-                        marker._endTrim = (end.value / 1000) * dur;
-                        if (marker._endTrim < marker._startTrim) {
-                            marker._endTrim = marker._startTrim;
-                            end.value = (marker._startTrim / dur) * 1000;
-                        }
-                        scrubTo(marker, marker._endTrim);
-                    }
-                    refresh();
-                };
-                start.min = 0; start.max = 1000;
-                end.min = 0; end.max = 1000;
-                start.value = (marker._startTrim / dur) * 1000;
-                end.value = (marker._endTrim / dur) * 1000;
-                start.addEventListener('input', () => sync(true));
-                end.addEventListener('input', () => sync(false));
-                scrubTo(marker, marker._startTrim);
-                refresh();
-            });
+            return;
         }
+        cars.forEach(marker => {
+            const dur = marker._samples[marker._samples.length - 1].t;
+            if (marker._startTrim == null) marker._startTrim = 0;
+            if (marker._endTrim == null) marker._endTrim = dur;
+            const row = document.createElement('div');
+            row.className = 'scrub-row';
+            const thumb = document.createElement('img');
+            thumb.className = 'scrub-thumb';
+            thumb.src = marker._img ? marker._img.src : '';
+            const delBtn = document.createElement('div');
+            delBtn.className = 'scrub-del-btn';
+            delBtn.textContent = '✕';
+            delBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                showConfirm(marker);
+            });
+            const time = document.createElement('div');
+            time.className = 'scrub-time';
+            const dual = document.createElement('div');
+            dual.className = 'scrub-dual';
+            const active = document.createElement('div');
+            active.className = 'scrub-active';
+            dual.appendChild(active);
+            const start = document.createElement('input');
+            start.type = 'range';
+            start.className = 'scrub-range scrub-start';
+            const end = document.createElement('input');
+            end.type = 'range';
+            end.className = 'scrub-range scrub-end';
+            dual.appendChild(start);
+            dual.appendChild(end);
+            row.appendChild(thumb);
+            row.appendChild(delBtn);
+            row.appendChild(time);
+            row.appendChild(dual);
+            scrubBody.appendChild(row);
+
+            const refresh = () => {
+                const p1 = (marker._startTrim / dur) * 100;
+                const p2 = (marker._endTrim / dur) * 100;
+                active.style.left = p1 + '%';
+                active.style.width = (p2 - p1) + '%';
+                time.textContent = fmtTime(marker._startTrim) + '–' + fmtTime(marker._endTrim);
+            };
+            const sync = isStart => {
+                if (isStart) {
+                    marker._startTrim = (start.value / 1000) * dur;
+                    if (marker._startTrim > marker._endTrim) {
+                        marker._startTrim = marker._endTrim;
+                        start.value = (marker._endTrim / dur) * 1000;
+                    }
+                    scrubTo(marker, marker._startTrim);
+                } else {
+                    marker._endTrim = (end.value / 1000) * dur;
+                    if (marker._endTrim < marker._startTrim) {
+                        marker._endTrim = marker._startTrim;
+                        end.value = (marker._startTrim / dur) * 1000;
+                    }
+                    scrubTo(marker, marker._endTrim);
+                }
+                refresh();
+            };
+            start.min = 0; start.max = 1000;
+            end.min = 0; end.max = 1000;
+            start.value = (marker._startTrim / dur) * 1000;
+            end.value = (marker._endTrim / dur) * 1000;
+            start.addEventListener('input', () => sync(true));
+            end.addEventListener('input', () => sync(false));
+            scrubTo(marker, marker._startTrim);
+            refresh();
+        });
         scrubModal.classList.add('visible');
     }
 
     function closeScrubber() {
+        hideConfirm();
         if (!_scrubOpen) return;
         _scrubOpen = false;
         scrubModal.classList.remove('visible');
     }
 
     scrubClose.addEventListener('click', closeScrubber);
+    confirmYes.addEventListener('click', () => { const m = _confirmMarker; hideConfirm(); if (m) deleteRecording(m); });
+    confirmNo.addEventListener('click', hideConfirm);
+    confirmModal.addEventListener('click', e => { if (e.target === confirmModal) hideConfirm(); });
 
     // ---- Кнопки ----
     function updateRecBtn() {
