@@ -1110,15 +1110,23 @@ function updateAllPicMarkers(event) {
         } else {
             const t = document.createElement('div');
             t.className = 'pdd-text';
+            const num = document.createElement('span');
+            num.className = 'pdd-row-num';
+            num.textContent = v.entry.num + '.';
+            t.appendChild(num);
             if (v.query) {
-                t.innerHTML = pddHighlightFull(v.entry.text, v.query);
+                const txt = document.createElement('span');
+                txt.innerHTML = pddHighlightFull(v.entry.text, v.query);
+                t.appendChild(txt);
                 body.appendChild(t);
                 requestAnimationFrame(() => {
                     const mark = t.querySelector('mark');
                     if (mark) mark.scrollIntoView({ block: 'center' });
                 });
             } else {
-                t.textContent = v.entry.text;
+                const txt = document.createElement('span');
+                txt.textContent = v.entry.text;
+                t.appendChild(txt);
                 body.appendChild(t);
             }
         }
