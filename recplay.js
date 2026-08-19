@@ -38,7 +38,7 @@
         #recAllBtn:active, #playAllBtn:active { transform:scale(0.92); }
         @keyframes recPulse { 50% { opacity:0.5; } }
         #scrubModal {
-            position:fixed; left:0; right:0; bottom:0; height:36vh; max-height:100vh; z-index:9100;
+            position:fixed; left:0; right:0; bottom:0; max-height:85vh; z-index:9100;
             background:rgba(15,15,15,0.97); color:#fff;
             display:flex; flex-direction:column;
             border-radius:16px 16px 0 0; border-top:0.5px solid rgba(255,255,255,0.12);
@@ -59,7 +59,7 @@
             display:flex; align-items:center; justify-content:center; touch-action:manipulation; flex-shrink:0;
         }
         .scrub-close:active { background:rgba(255,255,255,0.15); }
-        #scrubBody { flex:1; overflow-y:auto; padding:10px 12px 32px; -webkit-overflow-scrolling:touch; }
+        #scrubBody { flex:1; min-height:0; overflow-y:auto; padding:10px 12px 32px; -webkit-overflow-scrolling:touch; }
         .scrub-row {
             display:flex; align-items:center; gap:6px; padding:10px 8px;
             border-bottom:0.5px solid rgba(255,255,255,0.08);
