@@ -564,7 +564,7 @@ function placePic(lat, lon, moveAngle) {
 
 function setupTopDrag(marker) {
     const attach = (handle, side) => {
-        let dragging = false, cx = 0, cy = 0;
+        let dragging = false, cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0;
         handle.addEventListener('pointerdown', e => {
             if (drawMode || eraserMode) return;
             e.preventDefault();
@@ -575,17 +575,34 @@ function setupTopDrag(marker) {
             const rect = marker._rotWrap.getBoundingClientRect();
             cx = rect.left + rect.width / 2;
             cy = rect.top + rect.height / 2;
+            const hrect = handle.getBoundingClientRect();
+            offX = e.clientX - (hrect.left + hrect.width / 2);
+            offY = e.clientY - (hrect.top + hrect.height / 2);
+            downHD = marker._heading + mapRot;
+            prevHD = downHD;
             handle.setPointerCapture(e.pointerId);
         });
         handle.addEventListener('pointermove', e => {
             if (!dragging) return;
             const h = (marker._img.offsetHeight || 0) / 2;
-            const vx = e.clientX - cx, vy = e.clientY - cy;
-            const ang = Math.atan2(vy, vx);
-            const headingDeg = ang * 180 / Math.PI + (side === 'back' ? -90 : 90);
-            const nx = e.clientX - Math.cos(ang) * h;
-            const ny = e.clientY - Math.sin(ang) * h;
+            let rot = (prevHD - downHD) * Math.PI / 180;
+            let hx = e.clientX - (offX * Math.cos(rot) - offY * Math.sin(rot));
+            let hy = e.clientY - (offX * Math.sin(rot) + offY * Math.cos(rot));
+            let ang = Math.atan2(hy - cy, hx - cx);
+            let headingDeg = ang * 180 / Math.PI + (side === 'back' ? -90 : 90);
+            for (let i = 0; i < 8; i++) {
+                const r2 = (headingDeg - downHD) * Math.PI / 180;
+                hx = e.clientX - (offX * Math.cos(r2) - offY * Math.sin(r2));
+                hy = e.clientY - (offX * Math.sin(r2) + offY * Math.cos(r2));
+                ang = Math.atan2(hy - cy, hx - cx);
+                const nd = ang * 180 / Math.PI + (side === 'back' ? -90 : 90);
+                if (Math.abs(nd - headingDeg) < 1e-9) { headingDeg = nd; break; }
+                headingDeg = nd;
+            }
+            const nx = hx - Math.cos(ang) * h;
+            const ny = hy - Math.sin(ang) * h;
             marker._heading = headingDeg - mapRot;
+            prevHD = headingDeg;
             const dx = nx - cx, dy = ny - cy;
             const mpp = metersPerPixel(marker._lat);
             const R = mapRot * Math.PI / 180;
