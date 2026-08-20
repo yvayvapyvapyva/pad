@@ -105,6 +105,11 @@
             box-shadow:0 20px 60px rgba(0,0,0,0.4); transition:bottom .25s ease;
         }
         #znakPanel.visible { display:block; }
+        #znakPanel { scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.4) rgba(255,255,255,0.06); -webkit-overflow-scrolling:touch; }
+        #znakPanel::-webkit-scrollbar { width:16px; }
+        #znakPanel::-webkit-scrollbar-track { background:rgba(255,255,255,0.06); border-radius:8px; }
+        #znakPanel::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.4); border-radius:8px; border:4px solid rgba(15,15,15,0.9); background-clip:padding-box; }
+        #znakPanel::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,0.6); }
         .pdd-open #addPicBtn, .pdd-open #picPanel, .pdd-open #addZnakBtn, .pdd-open #znakPanel { z-index:9200; }
         body.pdd-drag #addPicBtn, body.pdd-drag #picPanel, body.pdd-drag #addZnakBtn, body.pdd-drag #znakPanel { transition:none; }
         #colorPanel {
