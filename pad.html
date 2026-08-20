@@ -362,7 +362,7 @@ let picGhost = null;
 
 function startPicDrag(cell, e) {
     e.preventDefault();
-    picDrag = { id: e.pointerId, item: cell, type: cell.dataset.type, startX: e.clientX, startY: e.clientY, active: false, angle: null, cx: 0, cy: 0, h: 0, sizeM: cell.dataset.type === 'znak' ? 0 : PIC_SIZE_M, pxH: cell.dataset.type === 'znak' ? ZNAK_PX_SIZE : 0 };
+    picDrag = { id: e.pointerId, item: cell, type: cell.dataset.type, startX: e.clientX, startY: e.clientY, active: false, angle: null, cx: 0, cy: 0, h: 0, sizeM: cell.dataset.type === 'pic' ? PIC_SIZE_M : 0, pxH: cell.dataset.type === 'znak' ? ZNAK_PX_SIZE : (cell.dataset.type === 'tl' ? (window.TL_PX_SIZE || 100) : 0) };
 }
 
 window.addEventListener('pointermove', e => {
@@ -373,17 +373,21 @@ window.addEventListener('pointermove', e => {
         picDrag.active = true;
         selectedPic = { file: picDrag.item.dataset.file, type: picDrag.type };
         picGhost = document.createElement('img');
-        picGhost.src = (picDrag.type === 'znak' ? 'znaki/' : 'pic/') + encodeURIComponent(selectedPic.file);
+        if (picDrag.type === 'tl') {
+            picGhost.src = (window.tlGhostSrc ? window.tlGhostSrc(selectedPic.file) : '');
+        } else {
+            picGhost.src = (picDrag.type === 'znak' ? 'znaki/' : 'pic/') + encodeURIComponent(selectedPic.file);
+        }
         picGhost.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
         document.body.appendChild(picGhost);
         const geo = screenToGeo(e.clientX, e.clientY);
-        picDrag.h = (picDrag.type === 'znak' ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat)) / 2;
+        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat)) / 2;
         picDrag.cx = e.clientX;
         picDrag.cy = e.clientY + picDrag.h;
         picDrag.angle = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
     } else if (picGhost) {
         const cGeo = screenToGeo(picDrag.cx, picDrag.cy);
-        picDrag.h = (picDrag.type === 'znak' ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat)) / 2;
+        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat)) / 2;
         const ang = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
         picDrag.angle = ang;
         picDrag.cx = e.clientX - Math.cos(ang) * picDrag.h;
@@ -574,7 +578,14 @@ function addDrawPoint(coords, screen) {
 function placePic(lat, lon, moveAngle) {
     if (!selectedPic) return;
     const file = selectedPic.file;
-    const isZnak = selectedPic.type === 'znak';
+    const type = selectedPic.type;
+    if (type === 'tl') {
+        if (window.placeTlMarker) window.placeTlMarker(lat, lon, moveAngle, file);
+        selectedPic = null;
+        document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+        return;
+    }
+    const isZnak = type === 'znak';
     const el = document.createElement('div');
     el.className = 'pic-marker';
     el.style.cssText = 'transform:translate(-50%,-50%);cursor:grab;';
@@ -603,17 +614,10 @@ function placePic(lat, lon, moveAngle) {
             const oldLat = marker._lat, oldLon = marker._lon;
             marker._lat = coords[1];
             marker._lon = coords[0];
-            if (marker._isZnak && oldLat != null) {
+            if ((marker._isZnak || marker._isTl) && oldLat != null) {
                 const dNorth = 111320 * (marker._lat - oldLat);
                 const dEast = 111320 * Math.cos(marker._lat * Math.PI / 180) * (marker._lon - oldLon);
-                if (dNorth * dNorth + dEast * dEast > 1e-6) {
-                    const mpp = metersPerPixel(marker._lat) || 1;
-                    const R = mapRot * Math.PI / 180;
-                    const sx = (dEast * Math.cos(R) + dNorth * Math.sin(R)) / mpp;
-                    const sy = (dEast * Math.sin(R) - dNorth * Math.cos(R)) / mpp;
-                    const target = Math.atan2(sy, sx) * 180 / Math.PI + 90 - mapRot;
-                    marker._heading = lerpAngleDeg(marker._heading, target, 0.3);
-                }
+                rotateByGeoVec(marker, dNorth, dEast);
             }
             updatePicMarker(marker);
         }
@@ -725,6 +729,7 @@ function ensureIndicators(marker) {
 }
 
 function ensureControlButtons(marker) {
+    if (marker._isTl) return;
     const wrap = marker._rotWrap;
     if (!marker._isZnak && !marker._leftBtn) {
         const mkBtn = (cls, arrow, side) => {
@@ -779,6 +784,10 @@ function clearEverything() {
     document.getElementById('addPicBtn').classList.remove('open');
     document.getElementById('znakPanel').classList.remove('visible');
     document.getElementById('addZnakBtn').classList.remove('open');
+    const tlPanel = document.getElementById('tlPanel');
+    const tlBtn = document.getElementById('addTlBtn');
+    if (tlPanel) tlPanel.classList.remove('visible');
+    if (tlBtn) tlBtn.classList.remove('open');
 }
 
 function setBlink(marker, side) {
@@ -795,6 +804,7 @@ function anyPanelOpen() {
 }
 
 function setPanel(marker, open) {
+    if (marker._isTl) { if (window.setTlPanel) window.setTlPanel(marker, open); return; }
     ensureControlButtons(marker);
     marker._panelOpen = open;
     marker._rotWrap.classList.toggle('panel-open', marker._panelOpen);
@@ -809,7 +819,7 @@ function togglePanel(marker) {
 function setupMarkerLongPress(marker) {
     const el = marker._select;
     el.addEventListener('pointerdown', e => {
-        if (e.target.closest && (e.target.closest('.drag-handle') || e.target.closest('.blink-btn') || e.target.closest('.delete-btn'))) return;
+        if (e.target.closest && (e.target.closest('.drag-handle') || e.target.closest('.blink-btn') || e.target.closest('.delete-btn') || e.target.closest('.tl-ctrl'))) return;
         const lpId = e.pointerId;
         const sx = e.clientX, sy = e.clientY;
         let timer = null;
@@ -847,6 +857,24 @@ function lerpAngleDeg(a, b, t) {
     return a + d * t;
 }
 
+// Поворот маркера по вектору движения на экране (dx, dy — смещение в пикселях)
+function rotateByScreenVec(marker, dx, dy) {
+    if (dx * dx + dy * dy <= 4) return;
+    const target = Math.atan2(dy, dx) * 180 / Math.PI + 90 - mapRot;
+    marker._heading = lerpAngleDeg(marker._heading, target, 0.3);
+}
+
+// Поворот маркера по вектору движения в географических координатах
+function rotateByGeoVec(marker, dNorth, dEast) {
+    if (dNorth * dNorth + dEast * dEast <= 1e-6) return;
+    const mpp = metersPerPixel(marker._lat) || 1;
+    const R = mapRot * Math.PI / 180;
+    const sx = (dEast * Math.cos(R) + dNorth * Math.sin(R)) / mpp;
+    const sy = (dEast * Math.sin(R) - dNorth * Math.cos(R)) / mpp;
+    const target = Math.atan2(sy, sx) * 180 / Math.PI + 90 - mapRot;
+    marker._heading = lerpAngleDeg(marker._heading, target, 0.3);
+}
+
 let firstTouch = null;
 let lastTouchMarker = null;
 
@@ -855,7 +883,7 @@ window.addEventListener('pointerdown', e => {
     if (drawMode || eraserMode) return;
     const t = e.target;
     const markerEl = t.closest ? t.closest('.pic-marker') : null;
-    if (markerEl && !(t.closest && (t.closest('.drag-handle') || t.closest('.blink-btn') || t.closest('.delete-btn')))) {
+    if (markerEl && !(t.closest && (t.closest('.drag-handle') || t.closest('.blink-btn') || t.closest('.delete-btn') || t.closest('.tl-ctrl') || t.closest('.tl-lamp') || t.closest('.tl-side')))) {
         if (!firstTouch) {
             const marker = placedMarkers.find(m => m._select === markerEl);
             if (!marker) return;
@@ -879,12 +907,8 @@ window.addEventListener('pointermove', e => {
         const m = firstTouch.marker;
         const dx = e.clientX - firstTouch.start.x;
         const dy = e.clientY - firstTouch.start.y;
-        if (m._isZnak) {
-            const mdx = e.clientX - firstTouch.last.x, mdy = e.clientY - firstTouch.last.y;
-            if (mdx * mdx + mdy * mdy > 4) {
-                const target = Math.atan2(mdy, mdx) * 180 / Math.PI + 90 - mapRot;
-                m._heading = lerpAngleDeg(m._heading, target, 0.3);
-            }
+        if (m._isZnak || m._isTl) {
+            rotateByScreenVec(m, e.clientX - firstTouch.last.x, e.clientY - firstTouch.last.y);
         }
         const mpp = metersPerPixel(firstTouch.baseLat);
         const R = mapRot * Math.PI / 180;
@@ -920,7 +944,9 @@ let mapRot = 0;
 let appBehaviors = ['drag', 'scrollZoom', 'dblClick', 'pinchZoom', 'pinchRotate', 'pinchTilt', 'mouseTilt', 'mouseRotate'];
 
 function updatePicMarker(marker) {
-    if (!marker || !marker._img) return;
+    if (!marker) return;
+    if (marker._isTl) { if (window.updateTlMarker) window.updateTlMarker(marker); return; }
+    if (!marker._img) return;
     const mpp = metersPerPixel(marker._lat);
     if (!mpp) return;
     const imgH = marker._isZnak ? (marker._pxH || ZNAK_PX_SIZE) : ((marker._sizeM || PIC_SIZE_M) / mpp);
@@ -1035,6 +1061,10 @@ function updateAllPicMarkers(event) {
             document.getElementById('addPicBtn').classList.remove('open');
             document.getElementById('znakPanel').classList.remove('visible');
             document.getElementById('addZnakBtn').classList.remove('open');
+            const dlTlP = document.getElementById('tlPanel');
+            const dlTlB = document.getElementById('addTlBtn');
+            if (dlTlP) dlTlP.classList.remove('visible');
+            if (dlTlB) dlTlB.classList.remove('open');
             startDraw();
         }
     });
@@ -1064,6 +1094,10 @@ function updateAllPicMarkers(event) {
             document.getElementById('addPicBtn').classList.remove('open');
             document.getElementById('znakPanel').classList.remove('visible');
             document.getElementById('addZnakBtn').classList.remove('open');
+            const elTlP = document.getElementById('tlPanel');
+            const elTlB = document.getElementById('addTlBtn');
+            if (elTlP) elTlP.classList.remove('visible');
+            if (elTlB) elTlB.classList.remove('open');
             startEraser();
         }
     });
@@ -1328,6 +1362,8 @@ function updateAllPicMarkers(event) {
     const galleryPanel = document.getElementById('picPanel');
     const znakBtn = document.getElementById('addZnakBtn');
     const znakPanelEl = document.getElementById('znakPanel');
+    const tlBtn = document.getElementById('addTlBtn');
+    const tlPanelEl = document.getElementById('tlPanel');
     function placeGalleryAbove() {
         if (document.body.classList.contains('pdd-open')) {
             const h = pddModal.offsetHeight + 12;
@@ -1335,11 +1371,15 @@ function updateAllPicMarkers(event) {
             galleryPanel.style.bottom = h + 'px';
             znakBtn.style.bottom = (h + 64) + 'px';
             znakPanelEl.style.bottom = h + 'px';
+            if (tlBtn) tlBtn.style.bottom = (h + 128) + 'px';
+            if (tlPanelEl) tlPanelEl.style.bottom = h + 'px';
         } else {
             galleryBtn.style.bottom = '';
             galleryPanel.style.bottom = '';
             znakBtn.style.bottom = '';
             znakPanelEl.style.bottom = '';
+            if (tlBtn) tlBtn.style.bottom = '';
+            if (tlPanelEl) tlPanelEl.style.bottom = '';
         }
     }
     pddHeader.addEventListener('pointermove', (e) => {
@@ -1364,6 +1404,10 @@ function updateAllPicMarkers(event) {
             const znakPanel = document.getElementById('znakPanel');
             znakPanel.classList.remove('visible');
             document.getElementById('addZnakBtn').classList.remove('open');
+            const tlPanel = document.getElementById('tlPanel');
+            if (tlPanel) { tlPanel.classList.remove('visible'); }
+            const tlBtn = document.getElementById('addTlBtn');
+            if (tlBtn) tlBtn.classList.remove('open');
         }
     });
 
@@ -1378,6 +1422,26 @@ function updateAllPicMarkers(event) {
             const picPanel = document.getElementById('picPanel');
             picPanel.classList.remove('visible');
             document.getElementById('addPicBtn').classList.remove('open');
+            const tlPanel = document.getElementById('tlPanel');
+            if (tlPanel) { tlPanel.classList.remove('visible'); }
+            const tlBtn = document.getElementById('addTlBtn');
+            if (tlBtn) tlBtn.classList.remove('open');
+        }
+    });
+
+    const tlToggleBtn = document.getElementById('addTlBtn');
+    if (tlToggleBtn) tlToggleBtn.addEventListener('click', () => {
+        if (drawMode) stopDraw();
+        if (eraserMode) stopEraser();
+        const panel = document.getElementById('tlPanel');
+        panel.classList.toggle('visible');
+        tlToggleBtn.classList.toggle('open', panel.classList.contains('visible'));
+        if (panel.classList.contains('visible')) {
+            if (window.buildTlGrid) window.buildTlGrid();
+            document.getElementById('picPanel').classList.remove('visible');
+            document.getElementById('addPicBtn').classList.remove('open');
+            document.getElementById('znakPanel').classList.remove('visible');
+            document.getElementById('addZnakBtn').classList.remove('open');
         }
     });
 
@@ -1390,5 +1454,6 @@ function updateAllPicMarkers(event) {
 })();
 </script>
 <script src="recplay.js"></script>
+<script src="trafficlights.js"></script>
 </body>
 </html>
