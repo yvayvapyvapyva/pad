@@ -264,8 +264,11 @@
         else if (sides === 'right') R = true;
         marker._blinkSide = (L && R) ? 'both' : L ? 'left' : R ? 'right' : null;
         if (!marker._rotWrap) return;
-        marker._rotWrap.classList.toggle('signal-left', L);
-        marker._rotWrap.classList.toggle('signal-right', R);
+        const both = L && R;
+        if (!L && !R) marker._rotWrap.classList.remove('blink-on');
+        marker._rotWrap.classList.toggle('signal-both', both);
+        marker._rotWrap.classList.toggle('signal-left', L && !both);
+        marker._rotWrap.classList.toggle('signal-right', R && !both);
         if (marker._leftBtn) marker._leftBtn.classList.toggle('active', L);
         if (marker._rightBtn) marker._rightBtn.classList.toggle('active', R);
     }
@@ -758,4 +761,15 @@
         origRemove(marker);
         updatePlayAllBtn();
     };
+
+    // ---- Общий «мигательный» таймер: все поворотники мигают в одной фазе ----
+    let _blinkOn = false;
+    setInterval(() => {
+        _blinkOn = !_blinkOn;
+        placedMarkers.forEach(m => {
+            if (!m._rotWrap) return;
+            if (m._blinkSide) m._rotWrap.classList.toggle('blink-on', _blinkOn);
+            else m._rotWrap.classList.remove('blink-on');
+        });
+    }, 450);
 })();
