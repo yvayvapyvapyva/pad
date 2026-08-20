@@ -120,6 +120,39 @@
         .scrub-start::-moz-range-thumb { background:#FF453A; }
         .scrub-end::-moz-range-thumb { background:#FFD60A; }
         .scrub-empty { padding:24px 12px; font-size:15px; color:rgba(255,255,255,0.55); text-align:center; }
+        .scrub-row { flex-wrap:wrap; }
+        .scrub-arrow {
+            width:22px; height:22px; border-radius:50%; flex-shrink:0;
+            background:rgba(255,255,255,0.1); border:0.5px solid rgba(255,255,255,0.15);
+            color:rgba(255,255,255,0.8); font-size:11px; line-height:1;
+            display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:manipulation;
+            transition:transform .2s ease;
+        }
+        .scrub-arrow.open { transform:rotate(180deg); background:rgba(255,204,0,0.22); border-color:#FFCC00; color:#FFCC00; }
+        .scrub-sigsec { flex:0 0 100%; display:none; padding-top:6px; }
+        .scrub-sigsec.open { display:block; }
+        .scrub-sigline { display:flex; align-items:center; gap:6px; padding:3px 0; }
+        .scrub-siglabel { flex-shrink:0; width:16px; text-align:center; font-size:14px; color:#FFCC00; }
+        .scrub-siglabel.right { color:#0A84FF; }
+        .scrub-sigtrack {
+            position:relative; flex:1; min-width:0; height:26px; border-radius:6px;
+            background:rgba(255,255,255,0.08); cursor:crosshair; touch-action:none; overflow:hidden;
+        }
+        .sig-seg { position:absolute; top:2px; bottom:2px; border-radius:4px; opacity:0.9; touch-action:none; }
+        .sig-seg.sig-seg-left { background:#FFCC00; }
+        .sig-seg.sig-seg-right { background:#0A84FF; }
+        .sig-seg.sig-draw { opacity:0.45; }
+        .sig-h {
+            position:absolute; top:0; bottom:0; width:10px; background:rgba(255,255,255,0.9);
+            cursor:ew-resize; touch-action:none; z-index:1;
+        }
+        .sig-h.sig-h-s { left:0; border-radius:4px 0 0 4px; }
+        .sig-h.sig-h-e { right:0; border-radius:0 4px 4px 0; }
+        .sig-del {
+            position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:14px; height:14px;
+            border-radius:50%; background:rgba(255,69,58,0.95); color:#fff; font-size:9px; line-height:1;
+            display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:none; z-index:2;
+        }
     `;
     document.head.appendChild(style);
 
@@ -214,6 +247,29 @@
         return (m._phaseOffset || 0) + (endTrim(m) - startTrim(m));
     }
 
+    function signalAt(marker, t) {
+        const s = marker._signals;
+        if (!s) return [];
+        const out = [];
+        for (const seg of s) {
+            if (t >= seg.t0 && t <= seg.t1 && out.indexOf(seg.side) === -1) out.push(seg.side);
+        }
+        return out;
+    }
+
+    function applySignal(marker, sides) {
+        let L = false, R = false;
+        if (Array.isArray(sides)) { L = sides.indexOf('left') !== -1; R = sides.indexOf('right') !== -1; }
+        else if (sides === 'left') L = true;
+        else if (sides === 'right') R = true;
+        marker._blinkSide = (L && R) ? 'both' : L ? 'left' : R ? 'right' : null;
+        if (!marker._rotWrap) return;
+        marker._rotWrap.classList.toggle('signal-left', L);
+        marker._rotWrap.classList.toggle('signal-right', R);
+        if (marker._leftBtn) marker._leftBtn.classList.toggle('active', L);
+        if (marker._rightBtn) marker._rightBtn.classList.toggle('active', R);
+    }
+
     function maxDurOf(cars) {
         return Math.max.apply(null, cars.map(endPhase).concat(1)) || 1;
     }
@@ -246,6 +302,7 @@
         marker._heading = lerpAngle(a.heading, b.heading, t);
         marker.update({ coordinates: [marker._lon, marker._lat] });
         updatePicMarker(marker);
+        applySignal(marker, signalAt(marker, e));
     }
 
     // ---- Запись ----
@@ -313,6 +370,7 @@
             marker._recActive = true;
             marker._prevSamples = marker._samples;
             marker._samples = [];
+            marker._signals = [];
             marker._lastRel = 0;
             if (_playAll) {
                 marker._phaseOffset = (performance.now() - _masterStart) % _maxDur;
@@ -343,6 +401,7 @@
         if (!targets.length) return;
         targets.forEach(m => {
             m._playing = true;
+            m._savedBlink = m._blinkSide;
             m.update({ draggable: false });
             m._select.style.pointerEvents = 'none';
         });
@@ -362,6 +421,7 @@
             if (!m._playing) return;
             m._playing = false;
             sampleAt(m, m._phaseOffset || 0); // вернуть на отсечённое начало
+            applySignal(m, m._savedBlink);    // вернуть ручной сигнал
             m._select.style.pointerEvents = '';
             m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
         });
@@ -374,6 +434,7 @@
         placedMarkers.forEach(m => {
             if (m._recActive && hasMovement(m) && !m._playing) {
                 m._playing = true;
+                m._savedBlink = m._blinkSide;
                 m.update({ draggable: false });
                 m._select.style.pointerEvents = 'none';
                 changed = true;
@@ -398,6 +459,7 @@
         if (_recOn) stopRec();
         if (_playAll) stopAll();
         _scrubOpen = true;
+        playables().forEach(m => { m._savedBlink = m._blinkSide; });
         buildScrubRows();
         scrubModal.classList.add('visible');
     }
@@ -417,6 +479,7 @@
         marker._startTrim = 0;
         marker._endTrim = undefined;
         marker._phaseOffset = 0;
+        marker._signals = [];
         if (_scrubOpen) buildScrubRows();
         updatePlayAllBtn();
     }
@@ -441,6 +504,17 @@
             const thumb = document.createElement('img');
             thumb.className = 'scrub-thumb';
             thumb.src = marker._img ? marker._img.src : '';
+            const arrowBtn = document.createElement('div');
+            arrowBtn.className = 'scrub-arrow';
+            arrowBtn.textContent = '▼';
+            const sigsec = document.createElement('div');
+            sigsec.className = 'scrub-sigsec' + (marker._sigOpen ? ' open' : '');
+            arrowBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                marker._sigOpen = !marker._sigOpen;
+                sigsec.classList.toggle('open', marker._sigOpen);
+                arrowBtn.classList.toggle('open', marker._sigOpen);
+            });
             const delBtn = document.createElement('div');
             delBtn.className = 'scrub-del-btn';
             delBtn.textContent = '✕';
@@ -464,9 +538,136 @@
             dual.appendChild(start);
             dual.appendChild(end);
             row.appendChild(thumb);
+            row.appendChild(arrowBtn);
             row.appendChild(delBtn);
             row.appendChild(time);
             row.appendChild(dual);
+
+            // ---- редактор поворотников (2 линии, сворачиваемый) ----
+            const attachSigTrack = side => {
+                const line = document.createElement('div');
+                line.className = 'scrub-sigline';
+                const label = document.createElement('div');
+                label.className = 'scrub-siglabel' + (side === 'right' ? ' right' : '');
+                label.textContent = side === 'left' ? '←' : '→';
+                const track = document.createElement('div');
+                track.className = 'scrub-sigtrack';
+                line.appendChild(label);
+                line.appendChild(track);
+                sigsec.appendChild(line);
+                const renderSegs = () => {
+                    track.textContent = '';
+                    (marker._signals || []).filter(s => s.side === side).forEach(seg => {
+                        const d = document.createElement('div');
+                        d.className = 'sig-seg sig-seg-' + seg.side;
+                        d._seg = seg;
+                        const hs = document.createElement('div');
+                        hs.className = 'sig-h sig-h-s';
+                        const he = document.createElement('div');
+                        he.className = 'sig-h sig-h-e';
+                        const del = document.createElement('div');
+                        del.className = 'sig-del';
+                        del.textContent = '✕';
+                        del.addEventListener('click', e => {
+                            e.stopPropagation();
+                            marker._signals = marker._signals.filter(s => s !== seg);
+                            buildScrubRows();
+                        });
+                        d.appendChild(hs);
+                        d.appendChild(he);
+                        d.appendChild(del);
+                        track.appendChild(d);
+                        placeSeg(d, seg);
+                    });
+                };
+                const placeSeg = (el, seg) => {
+                    el.style.left = (seg.t0 / dur * 100) + '%';
+                    el.style.width = Math.max(0.5, (seg.t1 - seg.t0) / dur * 100) + '%';
+                };
+                const tFromEvent = e => {
+                    const rect = track.getBoundingClientRect ? track.getBoundingClientRect() : track._rect;
+                    if (rect && rect.width) return Math.max(0, Math.min(dur, (e.clientX - rect.left) / rect.width * dur));
+                    return dur / 2;
+                };
+                const MINLEN = 0.15;
+                let sigDrag = null;
+                track.addEventListener('pointerdown', e => {
+                    e.stopPropagation();
+                    const t = tFromEvent(e);
+                    const segEl = e.target && e.target.closest ? e.target.closest('.sig-seg') : null;
+                    if (segEl && segEl._seg) {
+                        const seg = segEl._seg;
+                        if (e.target.closest('.sig-del')) return; // удаление — через click крестика
+                        const onStart = e.target.closest('.sig-h-s');
+                        const onEnd = e.target.closest('.sig-h-e');
+                        if (onStart || onEnd) {
+                            sigDrag = { mode: 'resize', marker, seg, edge: onStart ? 's' : 'e', segEl };
+                            scrubTo(marker, onStart ? seg.t0 : seg.t1);
+                        } else {
+                            sigDrag = { mode: 'move', marker, seg, segEl, startT: t, origT0: seg.t0 };
+                            scrubTo(marker, seg.t0);
+                        }
+                        return;
+                    }
+                    sigDrag = { mode: 'draw', marker, side, t0: t, t1: t };
+                    scrubTo(marker, t);
+                    const d = document.createElement('div');
+                    d.className = 'sig-seg sig-seg-' + side + ' sig-draw';
+                    track.appendChild(d);
+                    sigDrag.segEl = d;
+                    const upd = () => {
+                        const a = Math.min(sigDrag.t0, sigDrag.t1), b = Math.max(sigDrag.t0, sigDrag.t1);
+                        placeSeg(sigDrag.segEl, { t0: a, t1: b });
+                    };
+                    sigDrag.update = upd;
+                    upd();
+                });
+                track.addEventListener('pointermove', e => {
+                    if (!sigDrag) return;
+                    const t = tFromEvent(e);
+                    if (sigDrag.mode === 'draw') {
+                        sigDrag.t1 = t;
+                        sigDrag.update();
+                        scrubTo(marker, t);
+                    } else if (sigDrag.mode === 'resize') {
+                        const seg = sigDrag.seg;
+                        if (sigDrag.edge === 's') seg.t0 = Math.max(0, Math.min(t, seg.t1 - MINLEN));
+                        else seg.t1 = Math.min(dur, Math.max(t, seg.t0 + MINLEN));
+                        placeSeg(sigDrag.segEl, seg);
+                        scrubTo(marker, sigDrag.edge === 's' ? seg.t0 : seg.t1);
+                    } else if (sigDrag.mode === 'move') {
+                        const seg = sigDrag.seg;
+                        const len = seg.t1 - seg.t0;
+                        seg.t0 = Math.max(0, Math.min(sigDrag.origT0 + (t - sigDrag.startT), dur - len));
+                        seg.t1 = seg.t0 + len;
+                        placeSeg(sigDrag.segEl, seg);
+                        scrubTo(marker, seg.t0);
+                    }
+                });
+                track.addEventListener('pointerup', e => {
+                    if (!sigDrag) return;
+                    const d = sigDrag;
+                    sigDrag = null;
+                    if (d.mode === 'draw') {
+                        let a = Math.min(d.t0, d.t1), b = Math.max(d.t0, d.t1);
+                        if (b - a < 0.15) { const c = (a + b) / 2; a = Math.max(0, c - 0.35); b = Math.min(dur, c + 0.35); }
+                        marker._signals = marker._signals || [];
+                        marker._signals.push({ t0: a, t1: b, side: d.side });
+                        marker._signals.sort((x, y) => x.t0 - y.t0);
+                        buildScrubRows();
+                        return;
+                    }
+                    if (d.mode === 'resize' || d.mode === 'move') {
+                        marker._signals.sort((x, y) => x.t0 - y.t0);
+                        buildScrubRows();
+                    }
+                });
+                track.addEventListener('pointercancel', () => { sigDrag = null; renderSegs(); });
+                renderSegs();
+            };
+            attachSigTrack('left');
+            attachSigTrack('right');
+            row.appendChild(sigsec);
             scrubBody.appendChild(row);
 
             const refresh = () => {
@@ -511,6 +712,7 @@
         if (!_scrubOpen) return;
         _scrubOpen = false;
         scrubModal.classList.remove('visible');
+        playables().forEach(m => applySignal(m, m._savedBlink));
     }
 
     scrubClose.addEventListener('click', closeScrubber);
