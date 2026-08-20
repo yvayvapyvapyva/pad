@@ -101,15 +101,18 @@
             position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:76px;
             z-index:9005; width:max-content; max-width:calc(100vw - 88px);
             background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.12); border-radius:16px;
-            padding:10px; height:180px; overflow-y:auto; overflow-x:hidden; display:none;
+            padding:10px 4px 10px 10px; height:180px; overflow:hidden;
+            display:none; flex-direction:row; align-items:stretch;
             box-shadow:0 20px 60px rgba(0,0,0,0.4); transition:bottom .25s ease;
         }
-        #znakPanel.visible { display:block; }
-        #znakPanel { scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.4) rgba(255,255,255,0.06); -webkit-overflow-scrolling:touch; }
-        #znakPanel::-webkit-scrollbar { width:16px; }
-        #znakPanel::-webkit-scrollbar-track { background:rgba(255,255,255,0.06); border-radius:8px; }
-        #znakPanel::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.4); border-radius:8px; border:4px solid rgba(15,15,15,0.9); background-clip:padding-box; }
-        #znakPanel::-webkit-scrollbar-thumb:active { background:rgba(255,255,255,0.6); }
+        #znakPanel.visible { display:flex; }
+        #znakScroll { flex:1; overflow-y:scroll; overflow-x:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none; overscroll-behavior:contain; }
+        #znakScroll::-webkit-scrollbar { display:none; }
+        #znakScrollbar { position:relative; flex-shrink:0; width:18px; margin-left:2px; }
+        #znakScrollThumb {
+            position:absolute; left:3px; right:3px; top:0; height:40px; min-height:30px;
+            background:rgba(255,255,255,0.45); border-radius:7px; cursor:pointer; touch-action:none;
+        }
         .pdd-open #addPicBtn, .pdd-open #picPanel, .pdd-open #addZnakBtn, .pdd-open #znakPanel { z-index:9200; }
         body.pdd-drag #addPicBtn, body.pdd-drag #picPanel, body.pdd-drag #addZnakBtn, body.pdd-drag #znakPanel { transition:none; }
         #colorPanel {
@@ -256,7 +259,10 @@
     <div id="picGrid"></div>
 </div>
 <div id="znakPanel">
-    <div id="znakGrid"></div>
+    <div id="znakScroll">
+        <div id="znakGrid"></div>
+    </div>
+    <div id="znakScrollbar"><div id="znakScrollThumb"></div></div>
 </div>
 <div id="colorPanel">
     <div id="colorRow">
@@ -360,6 +366,51 @@ function buildZnakGrid() {
         cell.addEventListener('pointerdown', e => startPicDrag(cell, e));
         grid.appendChild(cell);
     });
+    if (window.updateZnakScrollbar) window.updateZnakScrollbar();
+}
+
+// ---- Кастомный постоянно видимый ползунок прокрутки галереи знаков ----
+function initZnakScrollbar() {
+    const scroller = document.getElementById('znakScroll');
+    const thumb = document.getElementById('znakScrollThumb');
+    if (!scroller || !thumb) return;
+    const update = () => {
+        const scrollH = scroller.scrollHeight - scroller.clientHeight;
+        const trackH = scroller.clientHeight;
+        if (scrollH <= 0) {
+            thumb.style.height = '0px';
+            thumb.style.top = '0px';
+            return;
+        }
+        const thumbH = Math.max(30, trackH * trackH / scroller.scrollHeight);
+        thumb.style.height = thumbH + 'px';
+        thumb.style.top = (scroller.scrollTop / scrollH * (trackH - thumbH)) + 'px';
+    };
+    scroller.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    thumb.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        const startY = e.clientY;
+        const startTop = parseFloat(thumb.style.top) || 0;
+        const trackH = scroller.clientHeight;
+        const thumbH = parseFloat(thumb.style.height) || 40;
+        const scrollH = scroller.scrollHeight - scroller.clientHeight;
+        const onMove = ev => {
+            const maxTop = trackH - thumbH;
+            const t = Math.min(maxTop, Math.max(0, startTop + (ev.clientY - startY)));
+            if (scrollH > 0) scroller.scrollTop = t / maxTop * scrollH;
+        };
+        const onEnd = () => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onEnd);
+            window.removeEventListener('pointercancel', onEnd);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onEnd);
+        window.addEventListener('pointercancel', onEnd);
+    });
+    window.updateZnakScrollbar = update;
+    update();
 }
 
 let picDrag = null;
@@ -1424,6 +1475,7 @@ function updateAllPicMarkers(event) {
         document.getElementById('addZnakBtn').classList.toggle('open', panel.classList.contains('visible'));
         if (panel.classList.contains('visible')) {
             buildZnakGrid();
+            if (window.updateZnakScrollbar) setTimeout(window.updateZnakScrollbar, 50);
             const picPanel = document.getElementById('picPanel');
             picPanel.classList.remove('visible');
             document.getElementById('addPicBtn').classList.remove('open');
@@ -1452,6 +1504,7 @@ function updateAllPicMarkers(event) {
 
     buildPicGrid();
     buildZnakGrid();
+    initZnakScrollbar();
     document.getElementById('addPicThumb').src = 'pic/' + encodeURIComponent(PIC_FILES[0]);
     document.getElementById('addZnakThumb').src = 'znaki/' + encodeURIComponent(ZNAKI_FILES[0]);
     document.querySelector('.color-btn[data-color="#000000"]').classList.add('active');
