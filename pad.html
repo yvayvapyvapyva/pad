@@ -646,14 +646,8 @@ function placePic(lat, lon, moveAngle) {
         coordinates: [lon, lat],
         draggable: true,
         onDragMove: (coords) => {
-            const oldLat = marker._lat, oldLon = marker._lon;
             marker._lat = coords[1];
             marker._lon = coords[0];
-            if (marker._isTl && oldLat != null) {
-                const dNorth = 111320 * (marker._lat - oldLat);
-                const dEast = 111320 * Math.cos(marker._lat * Math.PI / 180) * (marker._lon - oldLon);
-                rotateByGeoVec(marker, dNorth, dEast);
-            }
             updatePicMarker(marker);
         }
     }, el);
@@ -704,7 +698,8 @@ function setupTopDrag(marker) {
         });
         handle.addEventListener('pointermove', e => {
             if (!dragging) return;
-            const h = (marker._rotWrap.offsetHeight || 0) / 2;
+            const visH = marker._isTl ? (window.TL_PX_SIZE || 100) : marker._rotWrap.offsetHeight;
+            const h = (visH || 0) / 2;
             let rot = (prevHD - downHD) * Math.PI / 180;
             let hx = e.clientX - (offX * Math.cos(rot) - offY * Math.sin(rot));
             let hy = e.clientY - (offX * Math.sin(rot) + offY * Math.cos(rot));
@@ -885,29 +880,6 @@ function metersPerPixel(lat) {
     return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
 }
 
-// Плавный переход угла (кратчайший путь через границу ±180°)
-function lerpAngleDeg(a, b, t) {
-    const d = ((b - a + 540) % 360) - 180;
-    return a + d * t;
-}
-
-// Поворот маркера по вектору движения на экране (dx, dy — смещение в пикселях)
-function rotateByScreenVec(marker, dx, dy) {
-    if (dx * dx + dy * dy <= 4) return;
-    const target = Math.atan2(dy, dx) * 180 / Math.PI + 90 - mapRot;
-    marker._heading = lerpAngleDeg(marker._heading, target, 0.3);
-}
-
-// Поворот маркера по вектору движения в географических координатах
-function rotateByGeoVec(marker, dNorth, dEast) {
-    if (dNorth * dNorth + dEast * dEast <= 1e-6) return;
-    const mpp = metersPerPixel(marker._lat) || 1;
-    const R = mapRot * Math.PI / 180;
-    const sx = (dEast * Math.cos(R) + dNorth * Math.sin(R)) / mpp;
-    const sy = (dEast * Math.sin(R) - dNorth * Math.cos(R)) / mpp;
-    const target = Math.atan2(sy, sx) * 180 / Math.PI + 90 - mapRot;
-    marker._heading = lerpAngleDeg(marker._heading, target, 0.3);
-}
 
 let firstTouch = null;
 let lastTouchMarker = null;
@@ -941,9 +913,6 @@ window.addEventListener('pointermove', e => {
         const m = firstTouch.marker;
         const dx = e.clientX - firstTouch.start.x;
         const dy = e.clientY - firstTouch.start.y;
-        if (m._isTl) {
-            rotateByScreenVec(m, e.clientX - firstTouch.last.x, e.clientY - firstTouch.last.y);
-        }
         const mpp = metersPerPixel(firstTouch.baseLat);
         const R = mapRot * Math.PI / 180;
         const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;

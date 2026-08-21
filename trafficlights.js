@@ -21,6 +21,9 @@
     // Базовая высота .tl в CSS (px) — на карте масштабируется к TL_PX_SIZE
     const TL_BASE_H = 64;
 
+    // Отступ ручек вращения от корпуса (px)
+    const HANDLE_GAP_PX = 18;
+
     // ---- CSS ----
     const style = document.createElement('style');
     style.textContent = `
@@ -43,7 +46,7 @@
             border-radius:6px; display:flex; flex-direction:column; align-items:center;
             box-shadow:inset 0 0 6px rgba(0,0,0,0.6);
         }
-        .tl-lamp { position:absolute; left:50%; transform:translateX(-50%); width:14px; height:14px; border-radius:50%; background:#111; }
+        .tl-lamp { position:absolute; left:50%; transform:translateX(-50%); width:14px; height:14px; border-radius:50%; background:#111; outline:1px solid #4a4a4a; outline-offset:0; }
         .tl-lamp.tl-red { top:6px; }
         .tl-lamp.tl-yellow { top:25px; }
         .tl-lamp.tl-green { top:44px; }
@@ -60,7 +63,7 @@
         .tl-arrow { display:block; color:#111; }
         .tl-arrow.on { color:#30d158; filter:drop-shadow(0 0 3px rgba(48,209,88,0.9)); }
         .panel-open .tl-lamp, .panel-open .tl-side {
-            outline:2px solid rgba(255,255,255,0.4); outline-offset:2px; cursor:pointer;
+            outline:1px solid rgba(255,255,255,0.4); outline-offset:0; cursor:pointer;
         }
 
         .tl-ctrl {
@@ -175,6 +178,7 @@
         p.push('<rect x="' + bodyX + '" y="0" width="22" height="64" rx="6" fill="#202020" stroke="#4a4a4a" stroke-width="1.5"/>');
         const lampX = bodyX + 11;
         [[lampX, 13], [lampX, 32], [lampX, 51]].forEach(c => {
+            p.push('<circle cx="' + c[0] + '" cy="' + c[1] + '" r="7.5" fill="none" stroke="#4a4a4a" stroke-width="1"/>');
             p.push('<circle cx="' + c[0] + '" cy="' + c[1] + '" r="7" fill="#111"/>');
         });
         if (hasL) {
@@ -283,19 +287,19 @@
         wrap.style.transform = 'translate(-50%,-50%)';
         const tl = createTlDom(type);
         wrap.appendChild(tl);
+        const dragHandle = document.createElement('div');
+        dragHandle.className = 'drag-handle';
+        wrap.appendChild(dragHandle);
+        const dragHandleBack = document.createElement('div');
+        dragHandleBack.className = 'drag-handle drag-handle-back';
+        wrap.appendChild(dragHandleBack);
         el.appendChild(wrap);
         const marker = new ymaps3.YMapMarker({
             coordinates: [lon, lat],
             draggable: true,
             onDragMove: (coords) => {
-                const oldLat = marker._lat, oldLon = marker._lon;
                 marker._lat = coords[1];
                 marker._lon = coords[0];
-                if (window.rotateByGeoVec && oldLat != null) {
-                    const dNorth = 111320 * (marker._lat - oldLat);
-                    const dEast = 111320 * Math.cos(marker._lat * Math.PI / 180) * (marker._lon - oldLon);
-                    window.rotateByGeoVec(marker, dNorth, dEast);
-                }
                 updatePicMarker(marker);
             }
         }, el);
@@ -305,10 +309,11 @@
         marker._select = el;
         marker._tlType = type;
         marker._lampState = { red: false, yellow: false, green: false, left: false, right: false };
-        marker._dragHandles = [];
+        marker._dragHandles = [dragHandle, dragHandleBack];
         marker._heading = (moveAngle != null) ? moveAngle * 180 / Math.PI + 90 - mapRot : -mapRot;
         marker._lat = lat;
         marker._lon = lon;
+        if (window.setupTopDrag) setupTopDrag(marker);
         setupTlLongPress(marker);
         setupLampTaps(marker);
         updatePicMarker(marker);
@@ -321,6 +326,20 @@
         if (!marker || !marker._tlRoot) return;
         marker._rotWrap.style.transform = 'translate(-50%,-50%) rotate(' + (marker._heading + mapRot) + 'deg)';
         marker._tlRoot.style.transform = 'scale(' + (window.TL_PX_SIZE / TL_BASE_H) + ')';
+        // Ручки: ширина = ширине корпуса, вынесены за видимые кромки,
+        // чтобы не перекрывать крайние лампочки
+        if (marker._dragHandles && marker._dragHandles.length) {
+            const s = window.TL_PX_SIZE / TL_BASE_H;
+            const hw = 22 * s;
+            const off = (TL_BASE_H - window.TL_PX_SIZE) / 2 - HANDLE_GAP_PX;
+            marker._dragHandles.forEach(h => {
+                h.style.width = hw + 'px';
+                h.style.height = hw + 'px';
+            });
+            marker._dragHandles[0].style.top = off + 'px';
+            marker._dragHandles[0].style.bottom = 'auto';
+            marker._dragHandles[1].style.bottom = off + 'px';
+        }
     };
 
     // ---- Инициализация ----
