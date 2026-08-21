@@ -297,8 +297,8 @@ const ZNAKI_FILES = ['2.1.svg', '2.2.svg', '2.4.svg', '2.5.svg', '2.6.svg', '3.1
 // Реальный размер изображения на карте в метрах (по высоте)
 const PIC_SIZE_M = 5;
 
-// Фиксированный размер знака на карте в пикселях (не зависит от масштаба)
-const ZNAK_PX_SIZE = 64;
+// Реальный размер знака на карте в метрах (по ширине)
+const ZNAK_WIDTH_M = 8;
 
 // SVG-файлы знаков — глиф занимает не всё полотно 512x512, вокруг прозрачные поля.
 // Коэффициент масштаба (512 / max(ширина, высота) глифа) заполняет знаком рамку.
@@ -418,7 +418,8 @@ let picGhost = null;
 
 function startPicDrag(cell, e) {
     e.preventDefault();
-    picDrag = { id: e.pointerId, item: cell, type: cell.dataset.type, startX: e.clientX, startY: e.clientY, active: false, angle: null, cx: 0, cy: 0, h: 0, sizeM: cell.dataset.type === 'pic' ? PIC_SIZE_M : 0, pxH: cell.dataset.type === 'znak' ? ZNAK_PX_SIZE : (cell.dataset.type === 'tl' ? (window.TL_PX_SIZE || 100) : 0) };
+    const t = cell.dataset.type;
+    picDrag = { id: e.pointerId, item: cell, type: t, startX: e.clientX, startY: e.clientY, active: false, angle: null, cx: 0, cy: 0, h: 0, sizeM: t === 'pic' ? PIC_SIZE_M : (t === 'znak' ? ZNAK_WIDTH_M : 0), scaleK: t === 'znak' ? znakScale(cell.dataset.file) : 1, pxH: t === 'tl' ? (window.TL_PX_SIZE || 100) : 0 };
 }
 
 window.addEventListener('pointermove', e => {
@@ -437,13 +438,13 @@ window.addEventListener('pointermove', e => {
         picGhost.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
         document.body.appendChild(picGhost);
         const geo = screenToGeo(e.clientX, e.clientY);
-        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat)) / 2;
+        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat) / picDrag.scaleK) / 2;
         picDrag.cx = e.clientX;
         picDrag.cy = e.clientY + picDrag.h;
         picDrag.angle = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
     } else if (picGhost) {
         const cGeo = screenToGeo(picDrag.cx, picDrag.cy);
-        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat)) / 2;
+        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat) / picDrag.scaleK) / 2;
         const ang = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
         picDrag.angle = ang;
         picDrag.cx = e.clientX - Math.cos(ang) * picDrag.h;
@@ -683,7 +684,7 @@ function placePic(lat, lon, moveAngle) {
     marker._dragHandle = dragHandle;
     marker._dragHandles = dragHandle ? [dragHandle, dragHandleBack] : [];
     marker._sizeM = isZnak ? 0 : PIC_SIZE_M;
-    marker._pxH = isZnak ? ZNAK_PX_SIZE : 0;
+    marker._widthM = isZnak ? ZNAK_WIDTH_M : 0;
     marker._file = file;
     marker._isZnak = isZnak;
     img.onload = () => updatePicMarker(marker);
@@ -1005,10 +1006,19 @@ function updatePicMarker(marker) {
     if (!marker._img) return;
     const mpp = metersPerPixel(marker._lat);
     if (!mpp) return;
-    const imgH = marker._isZnak ? (marker._pxH || ZNAK_PX_SIZE) : ((marker._sizeM || PIC_SIZE_M) / mpp);
-    marker._img.style.height = imgH + 'px';
+    let imgH;
     if (marker._isZnak) {
-        marker._img.style.transform = 'scale(' + znakScale(marker._file) + ')';
+        const k = znakScale(marker._file);
+        const frameW = (marker._widthM || ZNAK_WIDTH_M) / mpp / k;
+        const natW = marker._img.naturalWidth || 512;
+        const natH = marker._img.naturalHeight || 512;
+        imgH = frameW * natH / natW;
+        marker._img.style.width = frameW + 'px';
+        marker._img.style.height = imgH + 'px';
+        marker._img.style.transform = 'scale(' + k + ')';
+    } else {
+        imgH = (marker._sizeM || PIC_SIZE_M) / mpp;
+        marker._img.style.height = imgH + 'px';
     }
     if (marker._dragHandles) {
         const imgW = marker._img.naturalWidth && marker._img.naturalHeight
