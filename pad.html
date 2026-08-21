@@ -151,7 +151,6 @@
             flex:0 0 auto;
         }
         .pic-item img { max-width:80px; max-height:60px; object-fit:contain; display:block; }
-        #znakGrid .pic-item img { width:64px; height:64px; max-width:none; max-height:none; }
         .pic-item.active { border-color:#30D158; background:rgba(48,209,88,0.2); }
         .pic-item.hidden { display:none; }
         #loading {
@@ -316,6 +315,25 @@ function znakScale(file) {
     return ZNAK_SCALE[file] || 2.5;
 }
 
+// Размер превью знака в галерее — видимый размер глифа, px
+const ZNAK_THUMB = 56;
+
+// Границы глифа в полотне 512x512 ([x, y, w, h]) — для кропа превью в галерее,
+// чтобы область касания совпадала с видимой частью и превью не перекрывали соседей
+const ZNAK_GLYPH = {
+    '2.1.svg': [153, 154, 206, 204], '2.2.svg': [153, 152, 206, 205], '2.4.svg': [154, 164, 205, 181],
+    '2.5.svg': [153, 152, 206, 205], '2.6.svg': [153, 152, 206, 205], '3.1.svg': [153, 152, 207, 207],
+    '3.2.svg': [153, 154, 206, 205], '3.24.20.svg': [153, 154, 206, 205], '3.24.30.svg': [153, 154, 206, 205],
+    '3.24.40.svg': [153, 154, 206, 205], '3.24.50.svg': [153, 154, 206, 205], '3.27.svg': [153, 154, 206, 205],
+    '3.31.svg': [153, 154, 206, 205], '4.1.1.svg': [153, 154, 206, 205], '4.3.svg': [153, 154, 206, 205],
+    '5.5.svg': [153, 153, 206, 206], '5.15.2.svg': [153, 153, 206, 206], '5.15.2_2.svg': [153, 153, 206, 206],
+    '5.15.2_3.svg': [153, 153, 206, 206], '5.15.2_5.svg': [153, 153, 206, 206], '5.15.2_7.svg': [153, 153, 206, 206],
+    '5.15.2_8.svg': [153, 153, 206, 206], '5.20.svg': [153, 154, 206, 205], '5.21.svg': [153, 102, 206, 308],
+    '6.3.1.svg': [153, 154, 206, 205], '6.4.svg': [154, 154, 205, 205], '6.16.svg': [151, 221, 210, 70],
+    '8.2.3.svg': [204, 152, 104, 204], '8.2.4.svg': [205, 152, 103, 204], '8.5.1.svg': [153, 203, 206, 102],
+    '8.5.2.svg': [154, 203, 205, 102], '8.5.7.svg': [153, 202, 206, 103]
+};
+
 // Диаметр лампочки поворотника в метрах (масштабируется с картой)
 const TURN_IND_SIZE_M = 1;
 
@@ -360,9 +378,19 @@ function buildZnakGrid() {
         const img = document.createElement('img');
         img.src = imgSrc;
         img.draggable = false;
-        if (cell.dataset.type === 'znak') img.style.transform = 'scale(' + znakScale(file) + ')';
+        // Кроп по глифу: обёртка с overflow:hidden показывает только сам знак,
+        // поэтому касание ловится ровно по видимой части и не перехватывается соседями
+        const g = ZNAK_GLYPH[file] || [153, 153, 206, 206];
+        const s = Math.min(ZNAK_THUMB / g[2], ZNAK_THUMB / g[3]);
+        const crop = document.createElement('div');
+        crop.style.cssText = 'position:relative;width:' + ZNAK_THUMB + 'px;height:' + ZNAK_THUMB + 'px;overflow:hidden;flex:0 0 auto;';
+        img.style.cssText = 'position:absolute;display:block;max-width:none;max-height:none;pointer-events:none;'
+            + 'left:' + ((ZNAK_THUMB - g[2] * s) / 2 - g[0] * s) + 'px;'
+            + 'top:' + ((ZNAK_THUMB - g[3] * s) / 2 - g[1] * s) + 'px;'
+            + 'width:' + (512 * s) + 'px;height:' + (512 * s) + 'px;';
         img.onerror = () => cell.classList.add('hidden');
-        cell.appendChild(img);
+        crop.appendChild(img);
+        cell.appendChild(crop);
         cell.addEventListener('pointerdown', e => startPicDrag(cell, e));
         grid.appendChild(cell);
     });
