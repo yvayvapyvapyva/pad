@@ -232,6 +232,7 @@
     function setupTlLongPress(marker) {
         const el = marker._select;
         el.addEventListener('pointerdown', e => {
+            if (drawMode || eraserMode) return;
             if (e.target.closest && e.target.closest('.tl-ctrl')) return;
             const lpId = e.pointerId;
             const sx = e.clientX, sy = e.clientY;
