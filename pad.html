@@ -1462,6 +1462,14 @@ function updateAllPicMarkers(event) {
     buildPicGrid();
     buildZnakGrid();
     initZnakScrollbar();
+    // iOS: гасим нативный скролл на элементах галерей, иначе он обгоняет drag
+    // и приходит pointercancel — вместо перетаскивания листается панель
+    ['picGrid', 'znakGrid'].forEach(id => {
+        const g = document.getElementById(id);
+        g.addEventListener('touchstart', e => {
+            if (e.target.closest && e.target.closest('.pic-item')) e.preventDefault();
+        }, { passive: false });
+    });
     document.getElementById('addPicThumb').src = 'pic/' + encodeURIComponent(PIC_FILES[0]);
     document.getElementById('addZnakThumb').src = 'znaki/' + encodeURIComponent(ZNAKI_FILES[0]);
     document.querySelector('.color-btn[data-color="#000000"]').classList.add('active');

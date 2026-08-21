@@ -162,6 +162,7 @@
             cap.textContent = TL_LABELS[file] || file;
             cell.appendChild(cap);
             cell.addEventListener('pointerdown', e => startPicDrag(cell, e));
+            cell.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
             grid.appendChild(cell);
         });
     };
