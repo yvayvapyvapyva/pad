@@ -299,6 +299,10 @@ const PIC_SIZE_M = 5;
 // Реальный размер знака на карте в метрах (видимая часть по большей стороне)
 const ZNAK_WIDTH_M = 8;
 
+// Долгое нажатие по маркеру: длительность и допуск смещения (стилус/палец дрожит)
+const LP_DURATION_MS = 500;
+const LP_MOVE_TOLERANCE_PX = 10;
+
 // Диаметр лампочки поворотника в метрах (масштабируется с картой)
 const TURN_IND_SIZE_M = 1;
 
@@ -855,7 +859,7 @@ function setupMarkerLongPress(marker) {
         const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
         const onMove = ev => {
             if (ev.pointerId !== lpId) return;
-            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 5) clearTimer();
+            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > LP_MOVE_TOLERANCE_PX) clearTimer();
         };
         const end = ev => {
             if (ev.pointerId !== lpId) return;
@@ -867,7 +871,7 @@ function setupMarkerLongPress(marker) {
         timer = setTimeout(() => {
             timer = null;
             togglePanel(marker);
-        }, 500);
+        }, LP_DURATION_MS);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', end);
         window.addEventListener('pointercancel', end);

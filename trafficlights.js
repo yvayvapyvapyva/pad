@@ -241,7 +241,7 @@
             const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
             const onMove = ev => {
                 if (ev.pointerId !== lpId) return;
-                if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 5) clearTimer();
+                if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10) clearTimer();
             };
             const end = ev => {
                 if (ev.pointerId !== lpId) return;
