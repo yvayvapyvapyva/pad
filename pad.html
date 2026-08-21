@@ -17,6 +17,7 @@
         }
         .fab:active { transform:scale(0.92); }
         .fab.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
+        #eraserBtn.active { background:rgba(255,59,48,0.55); border-color:#FF453A; }
         #drawBtn { top:calc(12px + env(safe-area-inset-top)); left:12px; }
         #eraserBtn { top:calc(12px + env(safe-area-inset-top)); left:76px; }
         #addPicBtn { bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; border-radius:12px; overflow:hidden; transition:bottom .25s ease; }
@@ -545,6 +546,15 @@ function eraseLine(line) {
     drawnLines.splice(drawnLines.indexOf(line), 1);
 }
 
+// Удаление машинки/знака/светофора под точкой экрана (режим ластика)
+function eraseMarkerAtScreen(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const mEl = el && el.closest ? el.closest('.pic-marker') : null;
+    if (!mEl) return;
+    const m = placedMarkers.find(mk => mk._select === mEl);
+    if (m) removeMarker(m);
+}
+
 function eraseAt(coords) {
     const th = 3 * metersPerPixel(coords[1]);
     for (let i = drawnLines.length - 1; i >= 0; i--) {
@@ -1013,6 +1023,7 @@ function updateAllPicMarkers(event) {
                 eraserPointerId = event.pointerId;
                 eraserDrag = true;
                 eraseAt(event.coordinates);
+                if (event.screenCoordinates) eraseMarkerAtScreen(event.screenCoordinates[0], event.screenCoordinates[1]);
                 return;
             }
             if (!drawMode || !event?.coordinates || drawing) return;
@@ -1025,7 +1036,10 @@ function updateAllPicMarkers(event) {
         },
         onPointerMove: (_, event) => {
             if (eraserMode) {
-                if (eraserDrag && event?.coordinates && event.pointerId === eraserPointerId) eraseAt(event.coordinates);
+                if (eraserDrag && event?.coordinates && event.pointerId === eraserPointerId) {
+                    eraseAt(event.coordinates);
+                    if (event.screenCoordinates) eraseMarkerAtScreen(event.screenCoordinates[0], event.screenCoordinates[1]);
+                }
                 return;
             }
             if (!drawMode || !drawing || !event?.coordinates || event.pointerId !== drawPointerId) return;
