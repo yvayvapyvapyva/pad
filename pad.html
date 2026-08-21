@@ -1411,7 +1411,8 @@ function updateAllPicMarkers(event) {
         panel.classList.toggle('visible');
         document.getElementById('addPicBtn').classList.toggle('open', panel.classList.contains('visible'));
         if (panel.classList.contains('visible')) {
-            buildPicGrid();
+            // Сетка строится один раз при старте; пересоздание заставляет картинки мигать
+            if (!document.getElementById('picGrid').children.length) buildPicGrid();
             const znakPanel = document.getElementById('znakPanel');
             znakPanel.classList.remove('visible');
             document.getElementById('addZnakBtn').classList.remove('open');
@@ -1429,7 +1430,7 @@ function updateAllPicMarkers(event) {
         panel.classList.toggle('visible');
         document.getElementById('addZnakBtn').classList.toggle('open', panel.classList.contains('visible'));
         if (panel.classList.contains('visible')) {
-            buildZnakGrid();
+            if (!document.getElementById('znakGrid').children.length) buildZnakGrid();
             if (window.updateZnakScrollbar) setTimeout(window.updateZnakScrollbar, 50);
             const picPanel = document.getElementById('picPanel');
             picPanel.classList.remove('visible');
