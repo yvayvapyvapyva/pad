@@ -682,7 +682,7 @@ function placePic(lat, lon, moveAngle) {
 
 function setupTopDrag(marker) {
     const attach = (handle, side) => {
-        let dragging = false, cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0;
+        let dragging = false, cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0, downH = 0;
         handle.addEventListener('pointerdown', e => {
             if (drawMode || eraserMode) return;
             e.preventDefault();
@@ -694,6 +694,8 @@ function setupTopDrag(marker) {
             cx = rect.left + rect.width / 2;
             cy = rect.top + rect.height / 2;
             const hrect = handle.getBoundingClientRect();
+            // Реальный радиус от центра маркера до центра ручки — без скачка при старте
+            downH = Math.hypot(hrect.left + hrect.width / 2 - cx, hrect.top + hrect.height / 2 - cy);
             offX = e.clientX - (hrect.left + hrect.width / 2);
             offY = e.clientY - (hrect.top + hrect.height / 2);
             downHD = marker._heading + mapRot;
@@ -702,8 +704,7 @@ function setupTopDrag(marker) {
         });
         handle.addEventListener('pointermove', e => {
             if (!dragging) return;
-            const visH = marker._isTl ? (window.TL_PX_SIZE || 100) : marker._rotWrap.offsetHeight;
-            const h = (visH || 0) / 2;
+            const h = downH;
             let rot = (prevHD - downHD) * Math.PI / 180;
             let hx = e.clientX - (offX * Math.cos(rot) - offY * Math.sin(rot));
             let hy = e.clientY - (offX * Math.sin(rot) + offY * Math.cos(rot));
