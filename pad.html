@@ -161,14 +161,13 @@
         @keyframes spin { to { transform:rotate(360deg); } }
         .pic-marker { max-width:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none; }
         .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+        /* Невидимые ручки вращения: верхняя и нижняя половины изображения */
         .drag-handle {
-            position:absolute; left:50%; top:0; transform:translate(-50%,-50%);
-            height:30px; width:30px; border-radius:50%; display:none; align-items:center; justify-content:center;
-            background:rgba(0,0,0,0.05);
-            cursor:grab; touch-action:none; z-index:3;
+            position:absolute; left:0; right:0; top:0; height:50%;
+            background:transparent; cursor:grab; touch-action:none; z-index:3;
         }
-        .drag-handle-back { top:auto; bottom:0; transform:translate(-50%,50%); }
-        .pic-marker .drag-handle { display:flex; }
+        .drag-handle-back { top:50%; }
+        .panel-open .drag-handle { pointer-events:none; }
         .turn-indicator {
             position:absolute; width:10px; height:10px;
             background:#FFCC00; border-radius:50%; opacity:0; pointer-events:none;
@@ -686,7 +685,6 @@ function setupTopDrag(marker) {
         handle.addEventListener('pointerdown', e => {
             if (drawMode || eraserMode) return;
             e.preventDefault();
-            e.stopPropagation();
             dragging = true;
             marker.update({ draggable: false });
             map.update({ behaviors: [] });
@@ -853,7 +851,7 @@ function togglePanel(marker) {
 function setupMarkerLongPress(marker) {
     const el = marker._select;
     el.addEventListener('pointerdown', e => {
-        if (e.target.closest && (e.target.closest('.drag-handle') || e.target.closest('.blink-btn') || e.target.closest('.delete-btn') || e.target.closest('.tl-ctrl'))) return;
+        if (e.target.closest && (e.target.closest('.blink-btn') || e.target.closest('.delete-btn') || e.target.closest('.tl-ctrl'))) return;
         const lpId = e.pointerId;
         const sx = e.clientX, sy = e.clientY;
         let timer = null;
@@ -965,17 +963,6 @@ function updatePicMarker(marker) {
     } else {
         imgH = (marker._sizeM || PIC_SIZE_M) / mpp;
         marker._img.style.height = imgH + 'px';
-    }
-    if (marker._dragHandles) {
-        const imgW = marker._img.naturalWidth && marker._img.naturalHeight
-            ? imgH * marker._img.naturalWidth / marker._img.naturalHeight
-            : marker._img.offsetWidth;
-        if (imgW) {
-            marker._dragHandles.forEach(h => {
-                h.style.width = imgW + 'px';
-                h.style.height = imgW + 'px';
-            });
-        }
     }
     marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._heading + mapRot}deg)`;
     if (marker._indicators) {

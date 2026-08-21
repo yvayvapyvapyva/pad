@@ -21,9 +21,6 @@
     // Базовая высота .tl в CSS (px) — на карте масштабируется к TL_PX_SIZE
     const TL_BASE_H = 64;
 
-    // Отступ ручек вращения от корпуса (px)
-    const HANDLE_GAP_PX = 18;
-
     // ---- CSS ----
     const style = document.createElement('style');
     style.textContent = `
@@ -327,19 +324,13 @@
         if (!marker || !marker._tlRoot) return;
         marker._rotWrap.style.transform = 'translate(-50%,-50%) rotate(' + (marker._heading + mapRot) + 'deg)';
         marker._tlRoot.style.transform = 'scale(' + (window.TL_PX_SIZE / TL_BASE_H) + ')';
-        // Ручки: ширина = ширине корпуса, вынесены за видимые кромки,
-        // чтобы не перекрывать крайние лампочки
+        // Ручки накрывают верхнюю и нижнюю половины видимого корпуса
         if (marker._dragHandles && marker._dragHandles.length) {
-            const s = window.TL_PX_SIZE / TL_BASE_H;
-            const hw = 22 * s;
-            const off = (TL_BASE_H - window.TL_PX_SIZE) / 2 - HANDLE_GAP_PX;
-            marker._dragHandles.forEach(h => {
-                h.style.width = hw + 'px';
-                h.style.height = hw + 'px';
-            });
+            const off = (TL_BASE_H - window.TL_PX_SIZE) / 2;
+            const halfH = window.TL_PX_SIZE / 2;
+            marker._dragHandles.forEach(h => { h.style.height = halfH + 'px'; });
             marker._dragHandles[0].style.top = off + 'px';
-            marker._dragHandles[0].style.bottom = 'auto';
-            marker._dragHandles[1].style.bottom = off + 'px';
+            marker._dragHandles[1].style.top = (off + halfH) + 'px';
         }
     };
 
