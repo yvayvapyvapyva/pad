@@ -286,12 +286,6 @@
         wrap.style.transform = 'translate(-50%,-50%)';
         const tl = createTlDom(type);
         wrap.appendChild(tl);
-        const dragHandle = document.createElement('div');
-        dragHandle.className = 'drag-handle';
-        wrap.appendChild(dragHandle);
-        const dragHandleBack = document.createElement('div');
-        dragHandleBack.className = 'drag-handle drag-handle-back';
-        wrap.appendChild(dragHandleBack);
         el.appendChild(wrap);
         const marker = new ymaps3.YMapMarker({
             coordinates: [lon, lat],
@@ -309,7 +303,6 @@
         marker._select = el;
         marker._tlType = type;
         marker._lampState = { red: false, yellow: false, green: false, left: false, right: false };
-        marker._dragHandles = [dragHandle, dragHandleBack];
         marker._heading = (moveAngle != null) ? moveAngle * 180 / Math.PI + 90 - mapRot : -mapRot;
         marker._lat = lat;
         marker._lon = lon;
@@ -326,15 +319,8 @@
     window.updateTlMarker = function (marker) {
         if (!marker || !marker._tlRoot) return;
         marker._rotWrap.style.transform = 'translate(-50%,-50%) rotate(' + (marker._heading + mapRot) + 'deg)';
-        marker._tlRoot.style.transform = 'scale(' + (window.TL_PX_SIZE / TL_BASE_H) + ')';
-        // Ручки накрывают верхнюю и нижнюю половины видимого корпуса
-        if (marker._dragHandles && marker._dragHandles.length) {
-            const off = (TL_BASE_H - window.TL_PX_SIZE) / 2;
-            const halfH = window.TL_PX_SIZE / 2;
-            marker._dragHandles.forEach(h => { h.style.height = halfH + 'px'; });
-            marker._dragHandles[0].style.top = off + 'px';
-            marker._dragHandles[1].style.top = (off + halfH) + 'px';
-        }
+        marker._tlScale = window.TL_PX_SIZE / TL_BASE_H; // для расчёта границы в setupTopDrag
+        marker._tlRoot.style.transform = 'scale(' + marker._tlScale + ')';
     };
 
     // ---- Инициализация ----

@@ -191,13 +191,7 @@
         @keyframes spin { to { transform:rotate(360deg); } }
         .pic-marker { max-width:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none; }
         .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
-        /* Невидимые ручки вращения: верхняя и нижняя половины изображения */
-        .drag-handle {
-            position:absolute; left:0; right:0; top:0; height:50%;
-            background:transparent; cursor:grab; touch-action:none; z-index:3;
-        }
-        .drag-handle-back { top:50%; }
-        .panel-open .drag-handle { pointer-events:none; }
+
         .turn-indicator {
             position:absolute; width:10px; height:10px;
             background:#FFCC00; border-radius:50%; opacity:0; pointer-events:none;
@@ -809,12 +803,6 @@ function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
     img.style.cssText = 'height:auto;display:block;pointer-events:none;';
     img.onerror = () => el.remove();
     wrap.appendChild(img);
-    const dragHandle = document.createElement('div');
-    dragHandle.className = 'drag-handle';
-    wrap.appendChild(dragHandle);
-    const dragHandleBack = document.createElement('div');
-    dragHandleBack.className = 'drag-handle drag-handle-back';
-    wrap.appendChild(dragHandleBack);
     el.appendChild(wrap);
     const marker = new ymaps3.YMapMarker({
         coordinates: [lon, lat],
@@ -829,8 +817,6 @@ function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
     }, el);
     marker._img = img;
     marker._rotWrap = wrap;
-    marker._dragHandle = dragHandle;
-    marker._dragHandles = [dragHandle, dragHandleBack];
     marker._sizeM = isZnak ? ZNAK_WIDTH_M : PIC_SIZE_M;
     marker._file = file;
     marker._isZnak = isZnak;
@@ -870,80 +856,131 @@ function placePic(lat, lon, moveAngle) {
     commit();
 }
 
+// Перетаскивание с фиксацией на границе изображения.
+// Касание картинки само по себе ничего не двигает; когда палец доходит
+// до границы изображения, точка захвата фиксируется на границе в одной
+// из 4 зон (верх / низ / лево / право) и включается прежний механизм
+// «тянуть-вращать»: машинка едет по дуге за пальцем.
 function setupTopDrag(marker) {
-    const attach = (handle, side) => {
-        let dragging = false, cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0, downH = 0;
-        let downLat = 0, downLon = 0, downHeading = 0;
-        handle.addEventListener('pointerdown', e => {
-            if (drawMode || eraserMode) return;
-            e.preventDefault();
-            dragging = true;
-            if (!marker._isTl && !marker._isZnak) setActiveCar(marker);
-            marker.update({ draggable: false });
-            map.update({ behaviors: [] });
-            const rect = marker._rotWrap.getBoundingClientRect();
-            cx = rect.left + rect.width / 2;
-            cy = rect.top + rect.height / 2;
-            const hrect = handle.getBoundingClientRect();
-            // Реальный радиус от центра маркера до центра ручки — без скачка при старте
-            downH = Math.hypot(hrect.left + hrect.width / 2 - cx, hrect.top + hrect.height / 2 - cy);
-            offX = e.clientX - (hrect.left + hrect.width / 2);
-            offY = e.clientY - (hrect.top + hrect.height / 2);
-            downHD = marker._heading + mapRot;
-            prevHD = downHD;
-            downLat = marker._lat;
-            downLon = marker._lon;
-            downHeading = marker._heading;
-            handle.setPointerCapture(e.pointerId);
-        });
-        handle.addEventListener('pointermove', e => {
-            if (!dragging) return;
-            const h = downH;
-            let rot = (prevHD - downHD) * Math.PI / 180;
-            let hx = e.clientX - (offX * Math.cos(rot) - offY * Math.sin(rot));
-            let hy = e.clientY - (offX * Math.sin(rot) + offY * Math.cos(rot));
-            let ang = Math.atan2(hy - cy, hx - cx);
-            let headingDeg = ang * 180 / Math.PI + (side === 'back' ? -90 : 90);
-            for (let i = 0; i < 8; i++) {
-                const r2 = (headingDeg - downHD) * Math.PI / 180;
-                hx = e.clientX - (offX * Math.cos(r2) - offY * Math.sin(r2));
-                hy = e.clientY - (offX * Math.sin(r2) + offY * Math.cos(r2));
-                ang = Math.atan2(hy - cy, hx - cx);
-                const nd = ang * 180 / Math.PI + (side === 'back' ? -90 : 90);
-                if (Math.abs(nd - headingDeg) < 1e-9) { headingDeg = nd; break; }
-                headingDeg = nd;
-            }
-            const nx = hx - Math.cos(ang) * h;
-            const ny = hy - Math.sin(ang) * h;
-            marker._heading = headingDeg - mapRot;
-            prevHD = headingDeg;
-            const dx = nx - cx, dy = ny - cy;
-            const mpp = metersPerPixel(marker._lat);
-            const R = mapRot * Math.PI / 180;
-            const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
-            const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
-            marker._lat += dNorth / 111320;
-            marker._lon += dEast / (111320 * Math.cos(marker._lat * Math.PI / 180));
-            marker.update({ coordinates: [marker._lon, marker._lat] });
-            updatePicMarker(marker);
-            cx = nx; cy = ny;
-        });
-        const stop = () => {
-            if (dragging) {
-                marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
-                map.update({ behaviors: (marker._panelOpen || drawMode || eraserMode) ? [] : appBehaviors });
-                const moved = Math.abs(marker._lat - downLat) > 1e-12 || Math.abs(marker._lon - downLon) > 1e-12 ||
-                    Math.abs(((marker._heading - downHeading) % 360 + 540) % 360 - 180) > 1e-6;
-                if (moved) commit();
-            }
-            dragging = false;
-        };
-        handle.addEventListener('pointerup', stop);
-        handle.addEventListener('pointercancel', stop);
+    const el = marker._select;
+    // Смещение угла курса для каждой зоны захвата
+    const ZONE_OFF = { top: 90, bottom: -90, left: 180, right: 0 };
+    let armed = false, active = false, pid = -1;
+    let cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0, downH = 0, sideOff = 90;
+    let downLat = 0, downLon = 0, downHeading = 0;
+
+    // Кнопки панелей исключаем; лампочки и боковые стрелки НЕ исключаем —
+    // касание корпуса должно гасить нативный драг маркера и взводить механизм
+    const skipped = t => t.closest && (t.closest('.blink-btn') || t.closest('.delete-btn') ||
+        t.closest('.tl-ctrl'));
+
+    // Видимые полуразмеры изображения (без учёта поворота)
+    const halfExtents = () => {
+        if (marker._isTl && marker._tlRoot) {
+            const s = marker._tlScale || ((window.TL_PX_SIZE || 100) / 64); // 64 — базовая высота .tl
+            return [marker._tlRoot.offsetWidth * s / 2, marker._tlRoot.offsetHeight * s / 2];
+        }
+        if (marker._img) return [marker._img.offsetWidth / 2, marker._img.offsetHeight / 2];
+        const r = marker._rotWrap.getBoundingClientRect();
+        return [r.width / 2, r.height / 2];
     };
-    marker._select.querySelectorAll('.drag-handle').forEach(handle => {
-        attach(handle, handle.classList.contains('drag-handle-back') ? 'back' : 'front');
+
+    // Фиксация на границе изображения: зона + точка захвата. false — ещё внутри.
+    const tryEngage = e => {
+        const rect = marker._rotWrap.getBoundingClientRect();
+        cx = rect.left + rect.width / 2;
+        cy = rect.top + rect.height / 2;
+        const th = (marker._heading + mapRot) * Math.PI / 180;
+        const cosT = Math.cos(th), sinT = Math.sin(th);
+        const dxw = e.clientX - cx, dyw = e.clientY - cy;
+        // Палец в локальных координатах изображения
+        const lx = dxw * cosT + dyw * sinT;
+        const ly = -dxw * sinT + dyw * cosT;
+        const hw = halfExtents()[0], hh = halfExtents()[1];
+        if (Math.abs(lx) <= hw && Math.abs(ly) <= hh) return false;
+        sideOff = (Math.abs(lx) / hw >= Math.abs(ly) / hh)
+            ? ZONE_OFF[lx > 0 ? 'right' : 'left']
+            : ZONE_OFF[ly > 0 ? 'bottom' : 'top'];
+        // Проекция пальца на границу — точка фиксации
+        const fx = Math.max(-hw, Math.min(hw, lx));
+        const fy = Math.max(-hh, Math.min(hh, ly));
+        offX = e.clientX - (cx + fx * cosT - fy * sinT);
+        offY = e.clientY - (cy + fx * sinT + fy * cosT);
+        downH = Math.hypot(fx, fy);
+        downHD = marker._heading + mapRot;
+        prevHD = downHD;
+        downLat = marker._lat;
+        downLon = marker._lon;
+        downHeading = marker._heading;
+        active = true;
+        return true;
+    };
+
+    el.addEventListener('pointerdown', e => {
+        if (drawMode || eraserMode || marker._panelOpen) return;
+        if (skipped(e.target)) return;
+        armed = true; active = false; pid = e.pointerId;
+        if (!marker._isTl && !marker._isZnak) setActiveCar(marker);
+        marker.update({ draggable: false });
+        map.update({ behaviors: [] });
     });
+
+    window.addEventListener('pointermove', e => {
+        if (!armed || active || e.pointerId !== pid) return;
+        if (marker._panelOpen) { armed = false; pid = -1; return; }
+        tryEngage(e);
+    });
+
+    window.addEventListener('pointermove', e => {
+        if (!active || e.pointerId !== pid) return;
+        const h = downH;
+        let rot = (prevHD - downHD) * Math.PI / 180;
+        let hx = e.clientX - (offX * Math.cos(rot) - offY * Math.sin(rot));
+        let hy = e.clientY - (offX * Math.sin(rot) + offY * Math.cos(rot));
+        let ang = Math.atan2(hy - cy, hx - cx);
+        let headingDeg = ang * 180 / Math.PI + sideOff;
+        for (let i = 0; i < 8; i++) {
+            const r2 = (headingDeg - downHD) * Math.PI / 180;
+            hx = e.clientX - (offX * Math.cos(r2) - offY * Math.sin(r2));
+            hy = e.clientY - (offX * Math.sin(r2) + offY * Math.cos(r2));
+            ang = Math.atan2(hy - cy, hx - cx);
+            const nd = ang * 180 / Math.PI + sideOff;
+            if (Math.abs(nd - headingDeg) < 1e-9) { headingDeg = nd; break; }
+            headingDeg = nd;
+        }
+        const nx = hx - Math.cos(ang) * h;
+        const ny = hy - Math.sin(ang) * h;
+        marker._heading = headingDeg - mapRot;
+        prevHD = headingDeg;
+        const dx = nx - cx, dy = ny - cy;
+        const mpp = metersPerPixel(marker._lat);
+        const R = mapRot * Math.PI / 180;
+        const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
+        const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
+        marker._lat += dNorth / 111320;
+        marker._lon += dEast / (111320 * Math.cos(marker._lat * Math.PI / 180));
+        marker.update({ coordinates: [marker._lon, marker._lat] });
+        updatePicMarker(marker);
+        cx = nx; cy = ny;
+    });
+
+    const stop = e => {
+        if (e.pointerId !== pid) return;
+        pid = -1;
+        if (active) {
+            marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
+            map.update({ behaviors: (marker._panelOpen || drawMode || eraserMode) ? [] : appBehaviors });
+            const moved = Math.abs(marker._lat - downLat) > 1e-12 || Math.abs(marker._lon - downLon) > 1e-12 ||
+                Math.abs(((marker._heading - downHeading) % 360 + 540) % 360 - 180) > 1e-6;
+            if (moved) commit();
+        } else if (armed) {
+            marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
+            if (!(marker._panelOpen || drawMode || eraserMode) && !anyPanelOpen()) map.update({ behaviors: appBehaviors });
+        }
+        armed = false; active = false;
+    };
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
 }
 
 function ensureIndicators(marker) {
@@ -1105,70 +1142,8 @@ function metersPerPixel(lat) {
 }
 
 
-let firstTouch = null;
-let lastTouchMarker = null;
-
-window.addEventListener('pointerdown', e => {
-    if (e.pointerType !== 'touch') return;
-    if (drawMode || eraserMode) return;
-    const t = e.target;
-    const markerEl = t.closest ? t.closest('.pic-marker') : null;
-    if (markerEl && !(t.closest && (t.closest('.drag-handle') || t.closest('.blink-btn') || t.closest('.delete-btn') || t.closest('.tl-ctrl') || t.closest('.tl-lamp') || t.closest('.tl-side')))) {
-        if (!firstTouch) {
-            const marker = placedMarkers.find(m => m._select === markerEl);
-            if (!marker) return;
-            if (!marker._isTl && !marker._isZnak) setActiveCar(marker);
-            marker.update({ draggable: false });
-            map.update({ behaviors: [] });
-            lastTouchMarker = marker;
-            firstTouch = {
-                id: e.pointerId, marker,
-                start: { x: e.clientX, y: e.clientY },
-                last: { x: e.clientX, y: e.clientY },
-                baseLat: marker._lat,
-                baseLon: marker._lon
-            };
-        }
-    }
-}, true);
-
-window.addEventListener('pointermove', e => {
-    if (e.pointerType !== 'touch') return;
-    if (firstTouch && e.pointerId === firstTouch.id) {
-        const m = firstTouch.marker;
-        const dx = e.clientX - firstTouch.start.x;
-        const dy = e.clientY - firstTouch.start.y;
-        const mpp = metersPerPixel(firstTouch.baseLat);
-        const R = mapRot * Math.PI / 180;
-        const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
-        const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
-        m._lat = firstTouch.baseLat + dNorth / 111320;
-        m._lon = firstTouch.baseLon + dEast / (111320 * Math.cos(firstTouch.baseLat * Math.PI / 180));
-        m.update({ coordinates: [m._lon, m._lat] });
-        updatePicMarker(m);
-        firstTouch.last = { x: e.clientX, y: e.clientY };
-    }
-}, true);
-
-const rotEnd = e => {
-    if (e.pointerType !== 'touch') return;
-    if (drawMode || eraserMode) return;
-    if (firstTouch && e.pointerId === firstTouch.id) {
-        const m = firstTouch.marker;
-        if (Math.abs(m._lat - firstTouch.baseLat) > 1e-12 || Math.abs(m._lon - firstTouch.baseLon) > 1e-12) commit();
-        firstTouch = null;
-    }
-    if (!firstTouch) {
-        const m = lastTouchMarker;
-        lastTouchMarker = null;
-        if (m && placedMarkers.indexOf(m) !== -1) {
-            m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
-        }
-        if (!anyPanelOpen()) map.update({ behaviors: appBehaviors });
-    }
-};
-window.addEventListener('pointerup', rotEnd, true);
-window.addEventListener('pointercancel', rotEnd, true);
+// Перемещение машинок касанием по телу убрано: перетаскивание теперь
+// начинается только с фиксации на границе изображения (см. setupTopDrag).
 
 let mapRot = 0;
 let appBehaviors = ['drag', 'scrollZoom', 'dblClick', 'pinchZoom', 'pinchRotate', 'pinchTilt', 'mouseTilt', 'mouseRotate'];
