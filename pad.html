@@ -174,6 +174,10 @@
             background:rgba(255,204,0,0.5); border-color:#FFD60A; color:#fff;
             box-shadow:0 0 16px 4px rgba(255,204,0,0.55);
         }
+        #signLegBtn.active {
+            background:rgba(255,255,255,0.3); border-color:#fff;
+            box-shadow:0 0 8px 2px rgba(255,255,255,0.45);
+        }
         .sig-fab.danger { color:#FF453A; }
         .sig-fab.danger:active { background:rgba(255,69,58,0.35); border-color:#FF453A; }
         #picGrid, #znakGrid { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
@@ -193,6 +197,13 @@
         @keyframes spin { to { transform:rotate(360deg); } }
         .pic-marker { max-width:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none; }
         .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+        /* Ножка дорожного знака: заходит под знак и рендерится позади него */
+        .sign-leg {
+            position:absolute; left:50%; transform:translateX(-50%);
+            background:#8E8E93; border-radius:2px; pointer-events:none;
+            box-shadow:0 0 0 1px #fff;
+            z-index:-1;
+        }
 
         .turn-indicator {
             position:absolute; width:10px; height:10px;
@@ -310,6 +321,7 @@
     <div class="sig-fab" id="sigLeftBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15 4 5 12l10 8z"/></svg></div>
     <div class="sig-fab" id="sigHazBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11 4 2.5 12l8.5 8zM13 4l8.5 8-8.5 8z"/></svg></div>
     <div class="sig-fab" id="sigRightBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M9 4l10 8-10 8z"/></svg></div>
+    <div class="sig-fab" id="signLegBtn" style="display:none"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="9" y="2" width="6" height="20" rx="3" fill="#8E8E93" stroke="#fff" stroke-width="1"/></svg></div>
     <div class="sig-fab danger" id="sigDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
 </div>
 
@@ -663,6 +675,7 @@ function serializeScene() {
             file: m._isTl ? m._tlType : m._file,
             lat: m._lat, lon: m._lon,
             heading: m._heading,
+            leg: !!m._leg,
             rec: (m._samples && m._samples.length) ? { samples: m._samples, st: m._startTrim || 0, et: (m._endTrim != null ? m._endTrim : m._samples[m._samples.length - 1].t), po: m._phaseOffset || 0, sig: m._signals || [] } : null
         }))
     };
@@ -696,6 +709,12 @@ function restoreScene(snap) {
             m = buildPicMarker(d.kind === 'znak', d.file, d.lat, d.lon, d.heading);
             map.addChild(m);
             placedMarkers.push(m);
+            if (d.leg && m._isZnak) {
+                const leg = document.createElement('div');
+                leg.className = 'sign-leg';
+                m._rotWrap.appendChild(leg);
+                m._leg = leg;
+            }
         }
         if (d.rec) {
             m._samples = d.rec.samples;
@@ -713,7 +732,7 @@ function restoreScene(snap) {
 function commit() {
     if (_restoring) return;
     const snap = serializeScene();
-    const json = JSON.stringify({ lines: snap.lines, markers: snap.markers.map(r => ({ kind: r.kind, file: r.file, lat: r.lat, lon: r.lon, heading: r.heading })) });
+    const json = JSON.stringify({ lines: snap.lines, markers: snap.markers.map(r => ({ kind: r.kind, file: r.file, lat: r.lat, lon: r.lon, heading: r.heading, leg: r.leg })) });
     if (undoStack.length && undoStack[undoStack.length - 1]._json === json) return;
     snap._json = json;
     undoStack.push(snap);
@@ -753,7 +772,7 @@ function updateHistoryBtns() {
 let activeCar = null;
 
 function setActiveCar(m) {
-    if (m && (m._isTl || m._isZnak)) m = null;
+    if (m && m._isTl) m = null;
     if (activeCar !== m) {
         if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.remove('car-active');
         activeCar = m || null;
@@ -766,6 +785,14 @@ function updateSignalBtns() {
     const box = document.getElementById('signalBtns');
     if (!box) return;
     box.classList.toggle('visible', !!activeCar && !drawMode && !eraserMode);
+    const isZnak = !!activeCar && !!activeCar._isZnak;
+    // У знака вместо поворотников — кнопка ножки
+    document.getElementById('sigLeftBtn').style.display = isZnak ? 'none' : '';
+    document.getElementById('sigHazBtn').style.display = isZnak ? 'none' : '';
+    document.getElementById('sigRightBtn').style.display = isZnak ? 'none' : '';
+    const legBtn = document.getElementById('signLegBtn');
+    legBtn.style.display = isZnak ? '' : 'none';
+    legBtn.classList.toggle('active', isZnak && !!activeCar._leg);
     const l = document.getElementById('sigLeftBtn');
     const r = document.getElementById('sigRightBtn');
     l.classList.toggle('active', !!activeCar && activeCar._blinkSide === 'left');
@@ -853,7 +880,7 @@ function placePic(lat, lon, moveAngle) {
     const marker = buildPicMarker(isZnak, file, lat, lon, headingDeg);
     map.addChild(marker);
     placedMarkers.push(marker);
-    if (!isZnak) setActiveCar(marker);
+    setActiveCar(marker);
     selectedPic = null;
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
     commit();
@@ -923,7 +950,7 @@ function setupTopDrag(marker) {
         if (drawMode || eraserMode || marker._panelOpen) return;
         if (skipped(e.target)) return;
         armed = true; active = false; pid = e.pointerId;
-        if (!marker._isTl && !marker._isZnak) setActiveCar(marker);
+        if (!marker._isTl) setActiveCar(marker);
         marker.update({ draggable: false });
         map.update({ behaviors: [] });
     });
@@ -1035,9 +1062,25 @@ function ensureControlButtons(marker) {
     updatePicMarker(marker);
 }
 
+// Ножка знака: добавить/убрать. Высота ножки = высоте знака (задаётся в updatePicMarker)
+function toggleSignLeg(marker) {
+    if (!marker || !marker._isZnak) return;
+    if (marker._leg) {
+        marker._leg.remove();
+        marker._leg = null;
+    } else {
+        const leg = document.createElement('div');
+        leg.className = 'sign-leg';
+        marker._rotWrap.appendChild(leg);
+        marker._leg = leg;
+    }
+    updatePicMarker(marker);
+    updateSignalBtns();
+    commit();
+}
+
 function removeMarker(marker) {
-    if (marker._panelOpen) setPanel(marker, false);
-    if (activeCar === marker) setActiveCar(null);
+    if (marker._panelOpen) setPanel(marker, false);    if (activeCar === marker) setActiveCar(null);
     map.removeChild(marker);
     const idx = placedMarkers.indexOf(marker);
     if (idx !== -1) placedMarkers.splice(idx, 1);
@@ -1162,6 +1205,13 @@ function updatePicMarker(marker) {
         imgH = (marker._sizeM || ZNAK_WIDTH_M) / mpp;
         marker._img.style.width = imgH + 'px';
         marker._img.style.height = imgH + 'px';
+        if (marker._leg) {
+            // Ножка длиннее знака: верхние 35% прячутся под знак (ножка на слое позади)
+            const overlap = imgH * 0.35;
+            marker._leg.style.top = (imgH - overlap) + 'px';
+            marker._leg.style.height = (imgH + overlap) + 'px';
+            marker._leg.style.width = Math.max(2, imgH * 0.09) + 'px';
+        }
     } else {
         imgH = (marker._sizeM || PIC_SIZE_M) / mpp;
         marker._img.style.height = imgH + 'px';
@@ -1361,6 +1411,11 @@ function updateAllPicMarkers(event) {
             removeMarker(activeCar);
             commit();
         }
+    });
+    document.getElementById('signLegBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar && activeCar._isZnak) toggleSignLeg(activeCar);
     });
 
     // Нажатие по пустому месту карты сбрасывает активную машинку
