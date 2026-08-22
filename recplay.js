@@ -262,7 +262,9 @@
         if (Array.isArray(sides)) { L = sides.indexOf('left') !== -1; R = sides.indexOf('right') !== -1; }
         else if (sides === 'left') L = true;
         else if (sides === 'right') R = true;
-        marker._blinkSide = (L && R) ? 'both' : L ? 'left' : R ? 'right' : null;
+        const newSide = (L && R) ? 'both' : L ? 'left' : R ? 'right' : null;
+        if (newSide !== marker._blinkSide) marker._blinkSince = performance.now();
+        marker._blinkSide = newSide;
         if (!marker._rotWrap) return;
         const both = L && R;
         if (!L && !R) marker._rotWrap.classList.remove('blink-on');
@@ -762,14 +764,20 @@
         updatePlayAllBtn();
     };
 
-    // ---- Общий «мигательный» таймер: все поворотники мигают в одной фазе ----
+    // ---- Индивидуальные фазы мигания поворотников ----
+    // Каждая машинка хранит момент включения (_blinkSince) и мигает в своём ритме.
     let _blinkOn = false;
     setInterval(() => {
-        _blinkOn = !_blinkOn;
+        const now = performance.now();
         placedMarkers.forEach(m => {
             if (!m._rotWrap) return;
-            if (m._blinkSide) m._rotWrap.classList.toggle('blink-on', _blinkOn);
-            else m._rotWrap.classList.remove('blink-on');
+            if (m._blinkSide) {
+                if (!m._blinkSince) m._blinkSince = now;
+                m._rotWrap.classList.toggle('blink-on', ((now - m._blinkSince) / 450) % 2 < 1);
+            } else {
+                m._blinkSince = 0;
+                m._rotWrap.classList.remove('blink-on');
+            }
         });
-    }, 450);
+    }, 100);
 })();

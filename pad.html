@@ -158,6 +158,22 @@
         }
         .color-btn.active { border-color:#30D158; box-shadow:0 0 0 3px rgba(48,209,88,0.4); }
         .color-btn:active { transform:scale(0.9); }
+        #signalBtns {
+            position:fixed; top:calc(76px + env(safe-area-inset-top)); left:12px;
+            z-index:9005; display:none; flex-direction:row; gap:10px;
+        }
+        #signalBtns.visible { display:flex; }
+        .sig-fab {
+            width:44px; height:44px; border-radius:12px;
+            background:rgba(15,15,15,0.75); border:0.5px solid rgba(255,255,255,0.12);
+            color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;
+            box-shadow:0 8px 32px rgba(0,0,0,0.3), 0 0 10px rgba(255,204,0,0.2); touch-action:manipulation; flex-shrink:0;
+        }
+        .sig-fab:active { transform:scale(0.92); }
+        .sig-fab.active {
+            background:rgba(255,204,0,0.5); border-color:#FFD60A; color:#fff;
+            box-shadow:0 0 16px 4px rgba(255,204,0,0.55);
+        }
         #picGrid, #znakGrid { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
         .pic-item {
             display:flex; align-items:center; justify-content:center; padding:6px; border-radius:10px;
@@ -294,6 +310,11 @@
     </div>
 </div>
 <input id="widthSlider" type="range" min="1" max="30" value="5" orient="vertical">
+<div id="signalBtns">
+    <div class="sig-fab" id="sigLeftBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15 4 5 12l10 8z"/></svg></div>
+    <div class="sig-fab" id="sigHazBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11 4 2.5 12l8.5 8zM13 4l8.5 8-8.5 8z"/></svg></div>
+    <div class="sig-fab" id="sigRightBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M9 4l10 8-10 8z"/></svg></div>
+</div>
 
 <script src="https://api-maps.yandex.ru/v3/?apikey=c0e28937-4e16-4d15-9b99-09a30cb8fc13&lang=ru_RU"></script>
 <script src="pdd.js"></script>
@@ -516,6 +537,7 @@ function setHandlesVisible(v) {
 
 function startDraw() {
     drawMode = true;
+    setActiveCar(null);
     setMarkersDraggable(false);
     setHandlesVisible(false);
     document.getElementById('drawBtn').classList.add('active');
@@ -542,6 +564,7 @@ function startEraser() {
     drawMode = false;
     eraserMode = true;
     eraserDrag = false;
+    setActiveCar(null);
     setMarkersDraggable(false);
     setHandlesVisible(false);
     document.getElementById('eraserBtn').classList.add('active');
@@ -685,6 +708,9 @@ function restoreScene(snap) {
             m._signals = d.rec.sig;
         }
     });
+    if (activeCar && placedMarkers.indexOf(activeCar) === -1) activeCar = null;
+    if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.add('car-active');
+    updateSignalBtns();
 }
 
 function commit() {
@@ -724,6 +750,31 @@ function updateHistoryBtns() {
     if (!u || !r) return;
     u.classList.toggle('dim', undoStack.length < 2);
     r.classList.toggle('dim', !redoStack.length);
+}
+
+// ---- Активная машинка: последняя нажатая/передвинутая, кнопки поворотников под карандашом ----
+let activeCar = null;
+
+function setActiveCar(m) {
+    if (m && (m._isTl || m._isZnak)) m = null;
+    if (activeCar !== m) {
+        if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.remove('car-active');
+        activeCar = m || null;
+        if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.add('car-active');
+    }
+    updateSignalBtns();
+}
+
+function updateSignalBtns() {
+    const box = document.getElementById('signalBtns');
+    if (!box) return;
+    box.classList.toggle('visible', !!activeCar && !drawMode && !eraserMode);
+    const l = document.getElementById('sigLeftBtn');
+    const r = document.getElementById('sigRightBtn');
+    l.classList.toggle('active', !!activeCar && activeCar._blinkSide === 'left');
+    r.classList.toggle('active', !!activeCar && activeCar._blinkSide === 'right');
+    const hz = document.getElementById('sigHazBtn');
+    if (hz) hz.classList.toggle('active', !!activeCar && activeCar._blinkSide === 'both');
 }
 
 function addDrawPoint(coords, screen) {
@@ -773,6 +824,7 @@ function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
             marker._lon = coords[0];
             updatePicMarker(marker);
         },
+        onDragStart: () => { if (!isZnak) setActiveCar(marker); },
         onDragEnd: () => commit()
     }, el);
     marker._img = img;
@@ -812,6 +864,7 @@ function placePic(lat, lon, moveAngle) {
     const marker = buildPicMarker(isZnak, file, lat, lon, headingDeg);
     map.addChild(marker);
     placedMarkers.push(marker);
+    if (!isZnak) setActiveCar(marker);
     selectedPic = null;
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
     commit();
@@ -825,6 +878,7 @@ function setupTopDrag(marker) {
             if (drawMode || eraserMode) return;
             e.preventDefault();
             dragging = true;
+            if (!marker._isTl && !marker._isZnak) setActiveCar(marker);
             marker.update({ draggable: false });
             map.update({ behaviors: [] });
             const rect = marker._rotWrap.getBoundingClientRect();
@@ -943,6 +997,7 @@ function ensureControlButtons(marker) {
 
 function removeMarker(marker) {
     if (marker._panelOpen) setPanel(marker, false);
+    if (activeCar === marker) setActiveCar(null);
     map.removeChild(marker);
     const idx = placedMarkers.indexOf(marker);
     if (idx !== -1) placedMarkers.splice(idx, 1);
@@ -955,6 +1010,7 @@ function clearEverything() {
     drawFeature = null;
     lineCoords = [];
     lastDrawScreen = null;
+    setActiveCar(null);
     drawnLines.forEach(line => { if (line.feature) map.removeChild(line.feature); });
     drawnLines = [];
     placedMarkers.slice().forEach(m => removeMarker(m));
@@ -971,11 +1027,28 @@ function clearEverything() {
 
 function setBlink(marker, side) {
     ensureIndicators(marker);
+    const prev = marker._blinkSide;
     marker._blinkSide = (marker._blinkSide === side) ? null : side;
+    if (marker._blinkSide !== prev) marker._blinkSince = performance.now();
+    marker._rotWrap.classList.remove('signal-both');
     marker._rotWrap.classList.toggle('signal-left', marker._blinkSide === 'left');
     marker._rotWrap.classList.toggle('signal-right', marker._blinkSide === 'right');
     if (marker._leftBtn) marker._leftBtn.classList.toggle('active', marker._blinkSide === 'left');
     if (marker._rightBtn) marker._rightBtn.classList.toggle('active', marker._blinkSide === 'right');
+    updateSignalBtns();
+}
+
+function setHazard(marker) {
+    ensureIndicators(marker);
+    const on = marker._blinkSide !== 'both';
+    marker._blinkSide = on ? 'both' : null;
+    if (marker._blinkSide) marker._blinkSince = performance.now();
+    else marker._blinkSince = 0;
+    marker._rotWrap.classList.toggle('signal-both', on);
+    marker._rotWrap.classList.remove('signal-left', 'signal-right');
+    if (marker._leftBtn) marker._leftBtn.classList.remove('active');
+    if (marker._rightBtn) marker._rightBtn.classList.remove('active');
+    updateSignalBtns();
 }
 
 function anyPanelOpen() {
@@ -1044,6 +1117,7 @@ window.addEventListener('pointerdown', e => {
         if (!firstTouch) {
             const marker = placedMarkers.find(m => m._select === markerEl);
             if (!marker) return;
+            if (!marker._isTl && !marker._isZnak) setActiveCar(marker);
             marker.update({ draggable: false });
             map.update({ behaviors: [] });
             lastTouchMarker = marker;
@@ -1286,6 +1360,32 @@ function updateAllPicMarkers(event) {
 
     document.getElementById('undoBtn').addEventListener('click', undoAction);
     document.getElementById('redoBtn').addEventListener('click', redoAction);
+
+    document.getElementById('sigLeftBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar) setBlink(activeCar, 'left');
+    });
+    document.getElementById('sigRightBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar) setBlink(activeCar, 'right');
+    });
+    document.getElementById('sigHazBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar) setHazard(activeCar);
+    });
+
+    // Нажатие по пустому месту карты сбрасывает активную машинку
+    window.addEventListener('pointerdown', e => {
+        if (!activeCar) return;
+        const t = e.target;
+        if (!t || !t.closest) return;
+        if (!t.closest('#map')) return;
+        if (t.closest('.pic-marker')) return;
+        setActiveCar(null);
+    }, true);
 
     const ROTATE_STEP = 5 * Math.PI / 180;
     const ROTATE_HOLD_STEP = 1 * Math.PI / 180;
