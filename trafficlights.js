@@ -11,8 +11,11 @@
     if (window.__trafficLightsLoaded) return;
     window.__trafficLightsLoaded = true;
 
-    // Размер светофора на карте в пикселях (не зависит от масштаба)
+    // Размер светофора по умолчанию в пикселях (fallback до первого расчёта масштаба)
     window.TL_PX_SIZE = 100;
+
+    // Высота светофора на карте в метрах — масштабируется вместе с картой
+    const TL_HEIGHT_M = 10;
 
     // Типы светофоров в галерее
     const TL_FILES = ['standart', 'arrow-left', 'arrow-right'];
@@ -238,7 +241,10 @@
 
     window.setTlPanel = function (marker, open) {
         marker._panelOpen = open;
-        if (!marker._ctrl) marker._rotWrap.appendChild(makeCtrl(marker));
+        if (!marker._ctrl) {
+            marker._rotWrap.appendChild(makeCtrl(marker));
+            if (marker._tlPx) marker._ctrl.style.top = 'calc(100% + ' + ((marker._tlPx - TL_BASE_H) / 2 + 8) + 'px)';
+        }
         marker._rotWrap.classList.toggle('panel-open', open);
         marker.update({ draggable: !(open || drawMode || eraserMode) });
         map.update({ behaviors: anyPanelOpen() ? [] : appBehaviors });
@@ -334,8 +340,18 @@
     window.updateTlMarker = function (marker) {
         if (!marker || !marker._tlRoot) return;
         marker._rotWrap.style.transform = 'translate(-50%,-50%) rotate(' + (marker._heading + mapRot) + 'deg)';
-        marker._tlScale = window.TL_PX_SIZE / TL_BASE_H; // для расчёта границы в setupTopDrag
+        // Динамический размер: высота светофора = TL_HEIGHT_M метров на местности,
+        // но не мельче 20px (иначе не ухватить) и не крупнее 100px
+        let pxH = window.TL_PX_SIZE;
+        if (window.metersPerPixel && marker._lat != null && isFinite(marker._lat)) {
+            const mpp = window.metersPerPixel(marker._lat);
+            if (mpp > 0) pxH = Math.min(100, Math.max(20, TL_HEIGHT_M / mpp));
+        }
+        marker._tlPx = pxH;
+        marker._tlScale = pxH / TL_BASE_H; // для расчёта границы в setupTopDrag
         marker._tlRoot.style.transform = 'scale(' + marker._tlScale + ')';
+        // Панель управления привязана к низу видимого корпуса
+        if (marker._ctrl) marker._ctrl.style.top = 'calc(100% + ' + ((pxH - TL_BASE_H) / 2 + 8) + 'px)';
     };
 
     // ---- Инициализация ----

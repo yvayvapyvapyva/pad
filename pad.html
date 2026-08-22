@@ -501,7 +501,7 @@ let picGhost = null;
 function startPicDrag(cell, e) {
     e.preventDefault();
     const t = cell.dataset.type;
-    picDrag = { id: e.pointerId, item: cell, type: t, startX: e.clientX, startY: e.clientY, active: false, angle: null, cx: 0, cy: 0, h: 0, sizeM: t === 'pic' ? PIC_SIZE_M : (t === 'znak' ? ZNAK_WIDTH_M : 0), scaleK: 1, pxH: t === 'tl' ? (window.TL_PX_SIZE || 100) : 0 };
+    picDrag = { id: e.pointerId, item: cell, type: t, startX: e.clientX, startY: e.clientY, active: false, angle: null, cx: 0, cy: 0, h: 0, sizeM: t === 'pic' ? PIC_SIZE_M : (t === 'znak' ? ZNAK_WIDTH_M : 0), scaleK: 1, pxH: t === 'tl' ? Math.min(100, Math.max(20, 10 / metersPerPixel(map.center[1]))) : 0 };
 }
 
 window.addEventListener('pointermove', e => {
