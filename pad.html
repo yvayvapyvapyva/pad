@@ -174,6 +174,8 @@
             background:rgba(255,204,0,0.5); border-color:#FFD60A; color:#fff;
             box-shadow:0 0 16px 4px rgba(255,204,0,0.55);
         }
+        .sig-fab.danger { color:#FF453A; }
+        .sig-fab.danger:active { background:rgba(255,69,58,0.35); border-color:#FF453A; }
         #picGrid, #znakGrid { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
         .pic-item {
             display:flex; align-items:center; justify-content:center; padding:6px; border-radius:10px;
@@ -308,6 +310,7 @@
     <div class="sig-fab" id="sigLeftBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15 4 5 12l10 8z"/></svg></div>
     <div class="sig-fab" id="sigHazBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11 4 2.5 12l8.5 8zM13 4l8.5 8-8.5 8z"/></svg></div>
     <div class="sig-fab" id="sigRightBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M9 4l10 8-10 8z"/></svg></div>
+    <div class="sig-fab danger" id="sigDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
 </div>
 
 <script src="https://api-maps.yandex.ru/v3/?apikey=c0e28937-4e16-4d15-9b99-09a30cb8fc13&lang=ru_RU"></script>
@@ -1350,6 +1353,14 @@ function updateAllPicMarkers(event) {
         e.preventDefault();
         e.stopPropagation();
         if (activeCar) setHazard(activeCar);
+    });
+    document.getElementById('sigDelBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar) {
+            removeMarker(activeCar);
+            commit();
+        }
     });
 
     // Нажатие по пустому месту карты сбрасывает активную машинку
