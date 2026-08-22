@@ -296,11 +296,12 @@
         const marker = new ymaps3.YMapMarker({
             coordinates: [lon, lat],
             draggable: true,
-            onDragMove: (coords) => {
-                marker._lat = coords[1];
-                marker._lon = coords[0];
-                updatePicMarker(marker);
-            }
+        onDragMove: (coords) => {
+            marker._lat = coords[1];
+            marker._lon = coords[0];
+            updatePicMarker(marker);
+        },
+        onDragEnd: () => { if (window.commit) window.commit(); }
         }, el);
         marker._isTl = true;
         marker._tlRoot = tl;
@@ -318,6 +319,7 @@
         updatePicMarker(marker);
         map.addChild(marker);
         placedMarkers.push(marker);
+        if (window.commit) window.commit();
     };
 
     // ---- Обновление на карте (вызывается из updatePicMarker) ----

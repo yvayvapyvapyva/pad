@@ -38,6 +38,19 @@
         }
         #rotateBtn .rot-btn:active { background:rgba(255,255,255,0.15); }
         #rotateBtn .rot-btn + .rot-btn { border-left:0.5px solid rgba(255,255,255,0.12); }
+        #historyBtn {
+            position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); right:12px;
+            z-index:9005; display:flex; flex-direction:row; overflow:hidden;
+            background:rgba(15,15,15,0.75); border:0.5px solid rgba(255,255,255,0.12); border-radius:52px;
+            box-shadow:0 8px 32px rgba(0,0,0,0.3); touch-action:manipulation;
+        }
+        #historyBtn .rot-btn {
+            width:46px; height:52px; border:none; background:transparent; color:#fff; cursor:pointer;
+            display:flex; align-items:center; justify-content:center; padding:0;
+        }
+        #historyBtn .rot-btn:active { background:rgba(255,255,255,0.15); }
+        #historyBtn .rot-btn + .rot-btn { border-left:0.5px solid rgba(255,255,255,0.12); }
+        #historyBtn .rot-btn.dim { opacity:0.35; }
         #pddBtn {
             position:fixed; top:calc(12px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
             z-index:9005; height:44px; padding:0 22px; border-radius:22px; border:0.5px solid rgba(255,255,255,0.12);
@@ -252,6 +265,14 @@
     </button>
     <button class="rot-btn" id="rotCWBtn" title="По часовой стрелке">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" style="transform:scaleX(-1)"><path d="M7.11 8.53 5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.59-1.01-2.47zm1.01 5.32c1.16.9 2.51 1.44 3.9 1.61V17.9c-.87-.15-1.71-.49-2.46-1.03L7.1 18.32zM13 4.07V1L8.45 5.55 13 10V6.09c2.84.48 5 2.94 5 5.91s-2.16 5.43-5 5.91v2.02c3.95-.49 7-3.85 7-7.93s-3.05-7.44-7-7.93z"/></svg>
+    </button>
+</div>
+<div id="historyBtn">
+    <button class="rot-btn" id="undoBtn" title="Отменить">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+    </button>
+    <button class="rot-btn" id="redoBtn" title="Вернуть">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" style="transform:scaleX(-1)"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
     </button>
 </div>
 <div id="picPanel" class="visible">
@@ -607,6 +628,104 @@ function hexToRgba(hex, alpha) {
     return 'rgba(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ', ' + alpha + ')';
 }
 
+// ---- История действий (undo/redo) ----
+// Снимки сцены: линии + объекты (тип/файл/позиция/угол). Записи REC и сигналы
+// поворотников не являются действиями и в историю не попадают; данные записей
+// передаются по ссылке, чтобы undo/redo их не терял.
+const MAX_HISTORY = 30;
+let undoStack = [], redoStack = [], _restoring = false;
+
+function serializeScene() {
+    return {
+        lines: drawnLines.map(l => ({ coords: l.coords.map(c => c.slice()), color: l.color || '#000000', width: l.width || 5 })),
+        markers: placedMarkers.map(m => ({
+            kind: m._isTl ? 'tl' : (m._isZnak ? 'znak' : 'pic'),
+            file: m._isTl ? m._tlType : m._file,
+            lat: m._lat, lon: m._lon,
+            heading: m._heading,
+            rec: (m._samples && m._samples.length) ? { samples: m._samples, st: m._startTrim || 0, et: (m._endTrim != null ? m._endTrim : m._samples[m._samples.length - 1].t), po: m._phaseOffset || 0, sig: m._signals || [] } : null
+        }))
+    };
+}
+
+function restoreScene(snap) {
+    drawing = false;
+    drawFeature = null;
+    lineCoords = [];
+    lastDrawScreen = null;
+    if (drawMode) stopDraw();
+    if (eraserMode) stopEraser();
+    placedMarkers.slice().forEach(m => removeMarker(m));
+    drawnLines.forEach(l => { if (l.feature) map.removeChild(l.feature); });
+    drawnLines = [];
+    snap.lines.forEach(l => {
+        const feature = new ymaps3.YMapFeature({
+            geometry: { type: 'LineString', coordinates: l.coords },
+            style: { stroke: [{ width: l.width, color: hexToRgba(l.color, 0.7) }] }
+        });
+        map.addChild(feature);
+        drawnLines.push({ feature, coords: l.coords, color: l.color, width: l.width });
+    });
+    snap.markers.forEach(d => {
+        let m;
+        if (d.kind === 'tl') {
+            const ang = (d.heading + mapRot - 90) * Math.PI / 180;
+            window.placeTlMarker(d.lat, d.lon, ang, d.file);
+            m = placedMarkers[placedMarkers.length - 1];
+        } else {
+            m = buildPicMarker(d.kind === 'znak', d.file, d.lat, d.lon, d.heading);
+            map.addChild(m);
+            placedMarkers.push(m);
+        }
+        if (d.rec) {
+            m._samples = d.rec.samples;
+            m._startTrim = d.rec.st;
+            m._endTrim = d.rec.et;
+            m._phaseOffset = d.rec.po;
+            m._signals = d.rec.sig;
+        }
+    });
+}
+
+function commit() {
+    if (_restoring) return;
+    const snap = serializeScene();
+    const json = JSON.stringify({ lines: snap.lines, markers: snap.markers.map(r => ({ kind: r.kind, file: r.file, lat: r.lat, lon: r.lon, heading: r.heading })) });
+    if (undoStack.length && undoStack[undoStack.length - 1]._json === json) return;
+    snap._json = json;
+    undoStack.push(snap);
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+    updateHistoryBtns();
+}
+
+function applySnapshot(snap) {
+    _restoring = true;
+    try { restoreScene(snap); } finally { _restoring = false; }
+    updateHistoryBtns();
+}
+
+function undoAction() {
+    if (undoStack.length < 2) return;
+    redoStack.push(undoStack.pop());
+    applySnapshot(undoStack[undoStack.length - 1]);
+}
+
+function redoAction() {
+    if (!redoStack.length) return;
+    const s = redoStack.pop();
+    undoStack.push(s);
+    applySnapshot(s);
+}
+
+function updateHistoryBtns() {
+    const u = document.getElementById('undoBtn');
+    const r = document.getElementById('redoBtn');
+    if (!u || !r) return;
+    u.classList.toggle('dim', undoStack.length < 2);
+    r.classList.toggle('dim', !redoStack.length);
+}
+
 function addDrawPoint(coords, screen) {
     if (screen && lastDrawScreen) {
         const dx = screen[0] - lastDrawScreen[0], dy = screen[1] - lastDrawScreen[1];
@@ -626,17 +745,8 @@ function addDrawPoint(coords, screen) {
     }
 }
 
-function placePic(lat, lon, moveAngle) {
-    if (!selectedPic) return;
-    const file = selectedPic.file;
-    const type = selectedPic.type;
-    if (type === 'tl') {
-        if (window.placeTlMarker) window.placeTlMarker(lat, lon, moveAngle, file);
-        selectedPic = null;
-        document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
-        return;
-    }
-    const isZnak = type === 'znak';
+// Фабрика маркера (машинка/знак): используется placePic и restoreScene
+function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
     const el = document.createElement('div');
     el.className = 'pic-marker';
     el.style.cssText = 'transform:translate(-50%,-50%);cursor:grab;';
@@ -662,20 +772,18 @@ function placePic(lat, lon, moveAngle) {
             marker._lat = coords[1];
             marker._lon = coords[0];
             updatePicMarker(marker);
-        }
+        },
+        onDragEnd: () => commit()
     }, el);
     marker._img = img;
     marker._rotWrap = wrap;
     marker._dragHandle = dragHandle;
-    marker._dragHandles = dragHandle ? [dragHandle, dragHandleBack] : [];
+    marker._dragHandles = [dragHandle, dragHandleBack];
     marker._sizeM = isZnak ? ZNAK_WIDTH_M : PIC_SIZE_M;
     marker._file = file;
     marker._isZnak = isZnak;
     img.onload = () => updatePicMarker(marker);
-    // Изначальное направление: строго вверх экрана, компенсирует текущий поворот карты
-    marker._heading = (moveAngle != null)
-        ? moveAngle * 180 / Math.PI + 90 - mapRot
-        : -mapRot;
+    marker._heading = headingDeg;
     marker._lat = lat;
     marker._lon = lon;
     marker._select = el;
@@ -683,15 +791,36 @@ function placePic(lat, lon, moveAngle) {
     setupMarkerLongPress(marker);
     if (!isZnak) ensureIndicators(marker);
     updatePicMarker(marker);
+    return marker;
+}
+
+function placePic(lat, lon, moveAngle) {
+    if (!selectedPic) return;
+    const file = selectedPic.file;
+    const type = selectedPic.type;
+    if (type === 'tl') {
+        if (window.placeTlMarker) window.placeTlMarker(lat, lon, moveAngle, file);
+        selectedPic = null;
+        document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+        return;
+    }
+    const isZnak = type === 'znak';
+    // Изначальное направление: строго вверх экрана, компенсирует текущий поворот карты
+    const headingDeg = (moveAngle != null)
+        ? moveAngle * 180 / Math.PI + 90 - mapRot
+        : -mapRot;
+    const marker = buildPicMarker(isZnak, file, lat, lon, headingDeg);
     map.addChild(marker);
     placedMarkers.push(marker);
     selectedPic = null;
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+    commit();
 }
 
 function setupTopDrag(marker) {
     const attach = (handle, side) => {
         let dragging = false, cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0, downH = 0;
+        let downLat = 0, downLon = 0, downHeading = 0;
         handle.addEventListener('pointerdown', e => {
             if (drawMode || eraserMode) return;
             e.preventDefault();
@@ -708,6 +837,9 @@ function setupTopDrag(marker) {
             offY = e.clientY - (hrect.top + hrect.height / 2);
             downHD = marker._heading + mapRot;
             prevHD = downHD;
+            downLat = marker._lat;
+            downLon = marker._lon;
+            downHeading = marker._heading;
             handle.setPointerCapture(e.pointerId);
         });
         handle.addEventListener('pointermove', e => {
@@ -746,6 +878,9 @@ function setupTopDrag(marker) {
             if (dragging) {
                 marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
                 map.update({ behaviors: (marker._panelOpen || drawMode || eraserMode) ? [] : appBehaviors });
+                const moved = Math.abs(marker._lat - downLat) > 1e-12 || Math.abs(marker._lon - downLon) > 1e-12 ||
+                    Math.abs(((marker._heading - downHeading) % 360 + 540) % 360 - 180) > 1e-6;
+                if (moved) commit();
             }
             dragging = false;
         };
@@ -798,6 +933,7 @@ function ensureControlButtons(marker) {
             e.preventDefault();
             e.stopPropagation();
             removeMarker(marker);
+            commit();
         });
         wrap.appendChild(del);
         marker._deleteBtn = del;
@@ -830,6 +966,7 @@ function clearEverything() {
     const tlBtn = document.getElementById('addTlBtn');
     if (tlPanel) tlPanel.classList.remove('visible');
     if (tlBtn) tlBtn.classList.remove('open');
+    commit();
 }
 
 function setBlink(marker, side) {
@@ -943,6 +1080,8 @@ const rotEnd = e => {
     if (e.pointerType !== 'touch') return;
     if (drawMode || eraserMode) return;
     if (firstTouch && e.pointerId === firstTouch.id) {
+        const m = firstTouch.marker;
+        if (Math.abs(m._lat - firstTouch.baseLat) > 1e-12 || Math.abs(m._lon - firstTouch.baseLon) > 1e-12) commit();
         firstTouch = null;
     }
     if (!firstTouch) {
@@ -1047,7 +1186,11 @@ function updateAllPicMarkers(event) {
             addDrawPoint(event.coordinates, event.screenCoordinates);
         },
         onPointerUp: () => {
-            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: smoothCoords(lineCoords.slice()) });
+            if (drawing && drawFeature) {
+                drawnLines.push({ feature: drawFeature, coords: smoothCoords(lineCoords.slice()), color: drawColor, width: drawWidth });
+                commit();
+            }
+            if (eraserMode && eraserDrag) commit();
             drawing = false;
             drawFeature = null;
             lineCoords = [];
@@ -1056,7 +1199,11 @@ function updateAllPicMarkers(event) {
             eraserPointerId = null;
         },
         onPointerCancel: () => {
-            if (drawing && drawFeature) drawnLines.push({ feature: drawFeature, coords: smoothCoords(lineCoords.slice()) });
+            if (drawing && drawFeature) {
+                drawnLines.push({ feature: drawFeature, coords: smoothCoords(lineCoords.slice()), color: drawColor, width: drawWidth });
+                commit();
+            }
+            if (eraserMode && eraserDrag) commit();
             drawing = false;
             drawFeature = null;
             lineCoords = [];
@@ -1136,6 +1283,9 @@ function updateAllPicMarkers(event) {
         if (!lastPos) return;
         map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
     });
+
+    document.getElementById('undoBtn').addEventListener('click', undoAction);
+    document.getElementById('redoBtn').addEventListener('click', redoAction);
 
     const ROTATE_STEP = 5 * Math.PI / 180;
     const ROTATE_HOLD_STEP = 1 * Math.PI / 180;
@@ -1475,6 +1625,7 @@ function updateAllPicMarkers(event) {
     document.getElementById('addPicThumb').src = 'pic/' + encodeURIComponent(PIC_FILES[0]);
     document.getElementById('addZnakThumb').src = 'znaki/' + encodeURIComponent(ZNAKI_FILES[0]);
     document.querySelector('.color-btn[data-color="#000000"]').classList.add('active');
+    commit();
     document.getElementById('loading').classList.add('hidden');
 })();
 </script>
