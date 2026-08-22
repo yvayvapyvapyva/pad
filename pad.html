@@ -163,6 +163,40 @@
             z-index:9005; display:none; flex-direction:row; gap:10px;
         }
         #signalBtns.visible { display:flex; }
+        /* Мини-светофор: панель активного светофора вместо кнопок поворотников */
+        #tlMini {
+            position:fixed; top:calc(76px + env(safe-area-inset-top)); left:12px;
+            z-index:9005; display:none; flex-direction:row; gap:10px; align-items:center;
+        }
+        #tlMini.visible { display:flex; }
+        .tlm-body {
+            width:36px; padding:7px 0; background:#202020; border:1.5px solid #4a4a4a;
+            border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:9px;
+            box-shadow:0 8px 32px rgba(0,0,0,0.3);
+        }
+        .tlm-lamp { width:21px; height:21px; border-radius:50%; background:#111; outline:1px solid #4a4a4a; cursor:pointer; touch-action:manipulation; }
+        .tlm-lamp:active { transform:scale(0.92); }
+        .tlm-lamp.on.tlm-red { background:#ff3b30; box-shadow:0 0 10px 3px rgba(255,59,48,0.85); }
+        .tlm-lamp.on.tlm-yellow { background:#ffcc00; box-shadow:0 0 10px 3px rgba(255,204,0,0.85); }
+        .tlm-lamp.on.tlm-green { background:#30d158; box-shadow:0 0 10px 3px rgba(48,209,88,0.85); }
+        /* Боковая секция мини-светофора — как .tl-side на карте с учётом
+           масштаба светофора TL_PX_SIZE/TL_BASE_H (100/64 ≈ 1.56):
+           22px * 1.56 ≈ 34px */
+        #tlMini { position:fixed; }
+        .tlm-wrap { position:relative; }
+        .tlm-side {
+            position:absolute; bottom:0;
+            display:none; align-items:center; justify-content:center;
+            width:34px; height:34px; background:#202020; border:2px solid #4a4a4a;
+            border-radius:9px; color:#111; cursor:pointer; touch-action:manipulation;
+        }
+        .tlm-side[data-key="left"] { right:100%; }
+        .tlm-side[data-key="right"] { left:100%; }
+        /* Левая секция выступает влево — сдвигаем панель от края экрана */
+        #tlMini.has-left { margin-left:38px; }
+        .tlm-side.visible { display:flex; }
+        .tlm-side:active { transform:scale(0.92); }
+        .tlm-side.on { color:#30d158; filter:drop-shadow(0 0 3px rgba(48,209,88,0.9)); }
         .sig-fab {
             width:44px; height:44px; border-radius:12px;
             background:rgba(15,15,15,0.75); border:0.5px solid rgba(255,255,255,0.12);
@@ -323,6 +357,18 @@
     <div class="sig-fab" id="sigRightBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M9 4l10 8-10 8z"/></svg></div>
     <div class="sig-fab" id="signLegBtn" style="display:none"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="9" y="2" width="6" height="20" rx="3" fill="#8E8E93" stroke="#fff" stroke-width="1"/></svg></div>
     <div class="sig-fab danger" id="sigDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+</div>
+<div id="tlMini">
+    <div class="tlm-wrap">
+        <div class="tlm-body">
+            <div class="tlm-lamp tlm-red" data-key="red"></div>
+            <div class="tlm-lamp tlm-yellow" data-key="yellow"></div>
+            <div class="tlm-lamp tlm-green" data-key="green"></div>
+        </div>
+        <div class="tlm-side" data-key="left"><svg viewBox="0 0 22 10" width="34" height="15.6"><rect x="11" y="3" width="7" height="4" fill="currentColor"/><polygon points="11,1 4,5 11,9" fill="currentColor"/></svg></div>
+        <div class="tlm-side" data-key="right"><svg viewBox="0 0 22 10" width="34" height="15.6"><rect x="4" y="3" width="7" height="4" fill="currentColor"/><polygon points="11,1 18,5 11,9" fill="currentColor"/></svg></div>
+    </div>
+    <div class="sig-fab danger" id="tlDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
 </div>
 
 <script src="https://api-maps.yandex.ru/v3/?apikey=c0e28937-4e16-4d15-9b99-09a30cb8fc13&lang=ru_RU"></script>
@@ -772,7 +818,6 @@ function updateHistoryBtns() {
 let activeCar = null;
 
 function setActiveCar(m) {
-    if (m && m._isTl) m = null;
     if (activeCar !== m) {
         if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.remove('car-active');
         activeCar = m || null;
@@ -784,8 +829,24 @@ function setActiveCar(m) {
 function updateSignalBtns() {
     const box = document.getElementById('signalBtns');
     if (!box) return;
-    box.classList.toggle('visible', !!activeCar && !drawMode && !eraserMode);
+    const isTl = !!activeCar && !!activeCar._isTl;
     const isZnak = !!activeCar && !!activeCar._isZnak;
+    // Светофор: вместо кнопок — мини-светофор
+    const mini = document.getElementById('tlMini');
+    mini.classList.toggle('visible', isTl && !drawMode && !eraserMode);
+    if (isTl) {
+        mini.querySelectorAll('.tlm-lamp').forEach(el => {
+            el.classList.toggle('on', !!activeCar._lampState[el.dataset.key]);
+        });
+        const ml = mini.querySelector('[data-key="left"]');
+        const mr = mini.querySelector('[data-key="right"]');
+        ml.classList.toggle('visible', activeCar._tlType === 'arrow-left');
+        mr.classList.toggle('visible', activeCar._tlType === 'arrow-right');
+        mini.classList.toggle('has-left', activeCar._tlType === 'arrow-left');
+        ml.classList.toggle('on', !!activeCar._lampState.left);
+        mr.classList.toggle('on', !!activeCar._lampState.right);
+    }
+    box.classList.toggle('visible', !!activeCar && !isTl && !drawMode && !eraserMode);
     // У знака вместо поворотников — кнопка ножки
     document.getElementById('sigLeftBtn').style.display = isZnak ? 'none' : '';
     document.getElementById('sigHazBtn').style.display = isZnak ? 'none' : '';
@@ -867,7 +928,11 @@ function placePic(lat, lon, moveAngle) {
     const file = selectedPic.file;
     const type = selectedPic.type;
     if (type === 'tl') {
-        if (window.placeTlMarker) window.placeTlMarker(lat, lon, moveAngle, file);
+        if (window.placeTlMarker) {
+            window.placeTlMarker(lat, lon, moveAngle, file);
+            const m = placedMarkers[placedMarkers.length - 1];
+            if (m && m._isTl) setActiveCar(m);
+        }
         selectedPic = null;
         document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
         return;
@@ -950,7 +1015,7 @@ function setupTopDrag(marker) {
         if (drawMode || eraserMode || marker._panelOpen) return;
         if (skipped(e.target)) return;
         armed = true; active = false; pid = e.pointerId;
-        if (!marker._isTl) setActiveCar(marker);
+        setActiveCar(marker);
         marker.update({ draggable: false });
         map.update({ behaviors: [] });
     });
@@ -1416,6 +1481,25 @@ function updateAllPicMarkers(event) {
         e.preventDefault();
         e.stopPropagation();
         if (activeCar && activeCar._isZnak) toggleSignLeg(activeCar);
+    });
+    // Мини-светофор: нажатие лампочки/стрелки переключает сигнал активного светофора
+    document.querySelectorAll('#tlMini .tlm-lamp, #tlMini .tlm-side').forEach(el => {
+        el.addEventListener('pointerdown', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!activeCar || !activeCar._isTl || !window.tlSetLamp) return;
+            const key = el.dataset.key;
+            window.tlSetLamp(activeCar, key, !activeCar._lampState[key]);
+            updateSignalBtns();
+        });
+    });
+    document.getElementById('tlDelBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar && activeCar._isTl) {
+            removeMarker(activeCar);
+            commit();
+        }
     });
 
     // Нажатие по пустому месту карты сбрасывает активную машинку

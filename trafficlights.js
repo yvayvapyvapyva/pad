@@ -24,7 +24,11 @@
     // ---- CSS ----
     const style = document.createElement('style');
     style.textContent = `
-        #addTlBtn { bottom:calc(140px + env(safe-area-inset-bottom)); left:12px; }
+        #addTlBtn {
+            bottom:calc(140px + env(safe-area-inset-bottom)); left:12px;
+            box-sizing:border-box; padding:0; margin:0; -webkit-appearance:none; appearance:none;
+            border-radius:12px; overflow:hidden;
+        }
         #tlPanel {
             position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:76px;
             z-index:9005; width:max-content; max-width:calc(100vw - 88px);
@@ -89,7 +93,7 @@
     const addTlBtn = document.createElement('button');
     addTlBtn.id = 'addTlBtn';
     addTlBtn.className = 'fab';
-    addTlBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22"><rect x="8.5" y="1.5" width="7" height="21" rx="2" fill="#333" stroke="#fff" stroke-width="1.2"/><circle cx="12" cy="6" r="2" fill="#fff"/><circle cx="12" cy="12" r="2" fill="#fff"/><circle cx="12" cy="18" r="2" fill="#fff"/></svg>';
+    addTlBtn.innerHTML = '<svg viewBox="0 0 24 24" width="40" height="40"><rect x="8.5" y="1.5" width="7" height="21" rx="2" fill="#333" stroke="#fff" stroke-width="1.2"/><circle cx="12" cy="6" r="2" fill="#ff3b30"/><circle cx="12" cy="12" r="2" fill="#ffcc00"/><circle cx="12" cy="18" r="2" fill="#30d158"/></svg>';
     document.body.appendChild(addTlBtn);
 
     // ---- Панель галереи ----
@@ -203,6 +207,8 @@
         const btn = marker._ctrl ? marker._ctrl.querySelector('.tl-btn[data-key="' + key + '"]') : null;
         if (btn) btn.classList.toggle('on', on);
     }
+    // Доступ из pad.html: мини-светофор в панели активного светофора
+    window.tlSetLamp = setLamp;
 
     function makeCtrl(marker) {
         const ctrl = document.createElement('div');
