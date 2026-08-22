@@ -330,12 +330,70 @@
         _recRaf = requestAnimationFrame(recFrame);
     }
 
+    // ---- Запись поворотников ----
+    // Пока идёт запись (REC), переключение поворотников (setBlink/setHazard)
+    // записывается в marker._signals как отрезки {t0, t1, side} — так же,
+    // как их рисуют вручную в редакторе перемотки.
+    function recSignalTime(marker) {
+        if (_playAll) {
+            const phase = (performance.now() - _masterStart) % _maxDur;
+            let t = phase - (marker._phaseOffset || 0);
+            if (t < 0) t += _maxDur;
+            return t;
+        }
+        return performance.now() - _recStart;
+    }
+
+    function closeRecSig(marker, side, tEnd) {
+        const open = marker._recSigOpen;
+        if (!open || open[side] == null) return;
+        const t0 = open[side];
+        open[side] = null;
+        marker._signals = marker._signals || [];
+        marker._signals.push({ t0: t0, t1: Math.max(t0 + 50, tEnd), side: side });
+        marker._signals.sort((a, b) => a.t0 - b.t0);
+    }
+
+    function recordSignalChange(marker) {
+        if (!_recOn || !marker || marker._isTl) return;
+        const L = marker._blinkSide === 'left' || marker._blinkSide === 'both';
+        const R = marker._blinkSide === 'right' || marker._blinkSide === 'both';
+        const t = Math.max(0, recSignalTime(marker));
+        const open = marker._recSigOpen || (marker._recSigOpen = { left: null, right: null });
+        [['left', L], ['right', R]].forEach(p => {
+            const side = p[0], want = p[1];
+            if (want && open[side] == null) open[side] = t;
+            else if (!want && open[side] != null) closeRecSig(marker, side, t);
+        });
+    }
+
+    function closeAllRecSigs(marker, tEnd) {
+        if (!marker._recSigOpen) return;
+        closeRecSig(marker, 'left', tEnd);
+        closeRecSig(marker, 'right', tEnd);
+        marker._recSigOpen = undefined;
+    }
+
+    // Оборачиваем переключение поворотников
+    const origSetBlink = window.setBlink;
+    const origSetHazard = window.setHazard;
+    window.setBlink = function (marker, side) {
+        origSetBlink(marker, side);
+        recordSignalChange(marker);
+    };
+    window.setHazard = function (marker) {
+        origSetHazard(marker);
+        recordSignalChange(marker);
+    };
+
     function stopRec() {
         if (!_recOn) return;
         _recOn = false;
         if (_recRaf) cancelAnimationFrame(_recRaf);
         _recRaf = null;
+        const tEnd = _playAll ? _maxDur : (performance.now() - _recStart);
         placedMarkers.forEach(m => {
+            closeAllRecSigs(m, tEnd);
             if (m._prevSamples && !hasMovement(m)) {
                 m._samples = m._prevSamples; // тронули, но не сдвинули — вернуть старую запись
             } else if (m._recActive && hasMovement(m)) {
@@ -356,6 +414,10 @@
             placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; });
             _recOn = true;
             _recStart = performance.now();
+            // Поворотники, уже включённые до старта записи, пишем с начала сессии
+            placedMarkers.forEach(m => {
+                if (m._blinkSide) recordSignalChange(m);
+            });
             _recRaf = requestAnimationFrame(recFrame);
             updateRecBtn();
             updatePlayAllBtn();
