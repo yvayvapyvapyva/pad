@@ -198,7 +198,7 @@
     };
 
     // ---- Управление сигналами ----
-    function setLamp(marker, key, on) {
+    function applyLamp(marker, key, on) {
         marker._lampState[key] = on;
         const lamp = marker._tlRoot.querySelector('.tl-lamp.tl-' + key);
         if (lamp) lamp.classList.toggle('on', on);
@@ -206,6 +206,15 @@
         if (arrow) arrow.classList.toggle('on', on);
         const btn = marker._ctrl ? marker._ctrl.querySelector('.tl-btn[data-key="' + key + '"]') : null;
         if (btn) btn.classList.toggle('on', on);
+    }
+
+    // Основной сигнал может гореть только один: включение гасит остальные
+    function setLamp(marker, key, on) {
+        const MAIN = ['red', 'yellow', 'green'];
+        if (on && MAIN.indexOf(key) !== -1) {
+            MAIN.forEach(k => { if (k !== key && marker._lampState[k]) applyLamp(marker, k, false); });
+        }
+        applyLamp(marker, key, on);
     }
     // Доступ из pad.html: мини-светофор в панели активного светофора
     window.tlSetLamp = setLamp;
