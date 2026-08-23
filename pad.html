@@ -3,6 +3,19 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        // В Telegram Mini App — раскрываем на весь экран
+        if (window.Telegram && window.Telegram.WebApp) {
+            const wa = window.Telegram.WebApp;
+            wa.ready();
+            wa.expand();
+            if (typeof wa.disableVerticalSwipes === 'function') wa.disableVerticalSwipes();
+            if (typeof wa.requestFullscreen === 'function') {
+                try { wa.requestFullscreen(); } catch (e) {}
+            }
+        }
+    </script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
         html, body { height:100%; width:100%; overflow:hidden; background:#000; }
