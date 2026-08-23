@@ -127,8 +127,10 @@
             position:absolute; left:3px; right:3px; top:0; height:40px; min-height:30px;
             background:rgba(255,255,255,0.45); border-radius:7px; cursor:pointer; touch-action:none;
         }
-        .pdd-open #addPicBtn, .pdd-open #picPanel, .pdd-open #addZnakBtn, .pdd-open #znakPanel { z-index:9200; }
-        body.pdd-drag #addPicBtn, body.pdd-drag #picPanel, body.pdd-drag #addZnakBtn, body.pdd-drag #znakPanel { transition:none; }
+        .pdd-open #addPicBtn, .pdd-open #picPanel, .pdd-open #addZnakBtn, .pdd-open #znakPanel,
+        .pdd-open #addTlBtn, .pdd-open #tlPanel { z-index:9200; }
+        body.pdd-drag #addPicBtn, body.pdd-drag #picPanel, body.pdd-drag #addZnakBtn, body.pdd-drag #znakPanel,
+        body.pdd-drag #addTlBtn, body.pdd-drag #tlPanel { transition:none; }
         #colorPanel {
             position:fixed; top:calc(76px + env(safe-area-inset-top)); left:12px;
             z-index:9005; display:none; flex-direction:row; gap:10px;
