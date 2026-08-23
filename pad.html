@@ -14,6 +14,18 @@
             if (typeof wa.requestFullscreen === 'function') {
                 try { wa.requestFullscreen(); } catch (e) {}
             }
+            // Сдвиг верхних элементов управления ниже системных кнопок Telegram
+            const applyTgInsets = () => {
+                let top = 0;
+                const cs = wa.contentSafeAreaInset, sa = wa.safeAreaInset;
+                if (cs && typeof cs.top === 'number') top = Math.max(top, cs.top);
+                if (sa && typeof sa.top === 'number') top = Math.max(top, sa.top);
+                document.documentElement.style.setProperty('--tg-top', Math.max(0, top) + 'px');
+            };
+            applyTgInsets();
+            ['viewportChanged', 'contentSafeAreaChanged', 'safeAreaChanged'].forEach(ev => {
+                if (typeof wa.onEvent === 'function') wa.onEvent(ev, applyTgInsets);
+            });
         }
     </script>
     <style>
@@ -313,6 +325,13 @@
         /* Запрет встроенного зума браузера на элементах управления */
         .fab, .sig-fab, #tlMini, .tlm-lamp, .tlm-side,
         #recAllBtn, #playAllBtn { touch-action:none !important; }
+
+        /* Telegram Mini App: опускаем верхние элементы ниже системных кнопок.
+           Величина --tg-top задаётся из Telegram.WebApp (contentSafeAreaInset). */
+        :root { --tg-top: 0px; }
+        #drawBtn, #eraserBtn, #rotateBtn, #pddBtn { top: calc(12px + env(safe-area-inset-top) + var(--tg-top)); }
+        #locateBtn, #signalBtns, #tlMini, #colorPanel { top: calc(76px + env(safe-area-inset-top) + var(--tg-top)); }
+        #widthSlider { top: calc(180px + env(safe-area-inset-top) + var(--tg-top)); }
     </style>
 </head>
 <body>
