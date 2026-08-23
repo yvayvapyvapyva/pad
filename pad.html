@@ -969,6 +969,7 @@ function setupTopDrag(marker) {
     let armed = false, active = false, pid = -1;
     let cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0, downH = 0, sideOff = 90;
     let downLat = 0, downLon = 0, downHeading = 0;
+    let lastX = 0, lastY = 0, hasPrev = false;
 
     // Кнопки панелей исключаем; лампочки и боковые стрелки НЕ исключаем —
     // касание корпуса должно гасить нативный драг маркера и взводить механизм
@@ -987,7 +988,9 @@ function setupTopDrag(marker) {
     };
 
     // Фиксация на границе изображения: зона + точка захвата. false — ещё внутри.
-    const tryEngage = e => {
+    // Зона выбирается не по стороне перехода, а по направлению движения пальца:
+    // активной становится та сторона, чья нормаль лучше совпадает с вектором движения.
+    const tryEngage = (e, mvx, mvy) => {
         const rect = marker._rotWrap.getBoundingClientRect();
         cx = rect.left + rect.width / 2;
         cy = rect.top + rect.height / 2;
@@ -999,9 +1002,16 @@ function setupTopDrag(marker) {
         const ly = -dxw * sinT + dyw * cosT;
         const hw = halfExtents()[0], hh = halfExtents()[1];
         if (Math.abs(lx) <= hw && Math.abs(ly) <= hh) return false;
-        sideOff = (Math.abs(lx) / hw >= Math.abs(ly) / hh)
-            ? ZONE_OFF[lx > 0 ? 'right' : 'left']
-            : ZONE_OFF[ly > 0 ? 'bottom' : 'top'];
+        // Вектор движения в локальных координатах изображения
+        const vx = mvx * cosT + mvy * sinT;
+        const vy = -mvx * sinT + mvy * cosT;
+        // Нормали сторон: верх (0,-1), низ (0,1), лево (-1,0), право (1,0)
+        let best = -Infinity, zone = 'top';
+        [[0, -1, 'top'], [0, 1, 'bottom'], [-1, 0, 'left'], [1, 0, 'right']].forEach(c => {
+            const dot = vx * c[0] + vy * c[1];
+            if (dot > best) { best = dot; zone = c[2]; }
+        });
+        sideOff = ZONE_OFF[zone];
         // Проекция пальца на границу — точка фиксации
         const fx = Math.max(-hw, Math.min(hw, lx));
         const fy = Math.max(-hh, Math.min(hh, ly));
@@ -1021,6 +1031,7 @@ function setupTopDrag(marker) {
         if (drawMode || eraserMode || marker._panelOpen) return;
         if (skipped(e.target)) return;
         armed = true; active = false; pid = e.pointerId;
+        lastX = e.clientX; lastY = e.clientY; hasPrev = false;
         setActiveCar(marker);
         marker.update({ draggable: false });
         map.update({ behaviors: [] });
@@ -1029,11 +1040,32 @@ function setupTopDrag(marker) {
     window.addEventListener('pointermove', e => {
         if (!armed || active || e.pointerId !== pid) return;
         if (marker._panelOpen) { armed = false; pid = -1; return; }
-        tryEngage(e);
+        // Вектор направления движения пальца с прошлого события
+        const mvx = e.clientX - lastX, mvy = e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+        hasPrev = true;
+        // пока вектор движения слишком мал — ждём (шум касания)
+        if (mvx * mvx + mvy * mvy < 1) return;
+        tryEngage(e, mvx, mvy);
     });
 
     window.addEventListener('pointermove', e => {
         if (!active || e.pointerId !== pid) return;
+        const mpp = metersPerPixel(marker._lat);
+        const R = mapRot * Math.PI / 180;
+        // Боковой захват (лево/право): чистое перемещение за пальцем, без поворота
+        if (sideOff === 0 || sideOff === 180) {
+            const dx = e.clientX - lastX, dy = e.clientY - lastY;
+            lastX = e.clientX; lastY = e.clientY;
+            const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
+            const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
+            marker._lat += dNorth / 111320;
+            marker._lon += dEast / (111320 * Math.cos(marker._lat * Math.PI / 180));
+            marker.update({ coordinates: [marker._lon, marker._lat] });
+            updatePicMarker(marker);
+            return;
+        }
+        // Передний/задний захват (верх/низ): езда по дуге с поворотом курса
         const h = downH;
         let rot = (prevHD - downHD) * Math.PI / 180;
         let hx = e.clientX - (offX * Math.cos(rot) - offY * Math.sin(rot));
@@ -1054,8 +1086,6 @@ function setupTopDrag(marker) {
         marker._heading = headingDeg - mapRot;
         prevHD = headingDeg;
         const dx = nx - cx, dy = ny - cy;
-        const mpp = metersPerPixel(marker._lat);
-        const R = mapRot * Math.PI / 180;
         const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
         const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
         marker._lat += dNorth / 111320;
