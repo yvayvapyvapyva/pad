@@ -280,6 +280,9 @@
             box-shadow:0 4px 12px rgba(0,0,0,0.4); font-size:16px; line-height:1;
         }
         .panel-open .delete-btn { display:flex; }
+        /* Запрет встроенного зума браузера на элементах управления */
+        .fab, .sig-fab, #tlMini, .tlm-lamp, .tlm-side,
+        #recAllBtn, #playAllBtn { touch-action:none !important; }
     </style>
 </head>
 <body>
@@ -1853,6 +1856,12 @@ function updateAllPicMarkers(event) {
     commit();
     document.getElementById('loading').classList.add('hidden');
 })();
+</script>
+<script>
+// Запрет встроенного зума браузера (iOS Safari игнорирует user-scalable=no).
+// Зум карты работает через touch-события и не затрагивается.
+['gesturestart', 'gesturechange'].forEach(ev =>
+    document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
 </script>
 <script src="recplay.js"></script>
 <script src="trafficlights.js"></script>
