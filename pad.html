@@ -1756,9 +1756,10 @@ function updateAllPicMarkers(event) {
     const galleryPanel = document.getElementById('picPanel');
     const znakBtn = document.getElementById('addZnakBtn');
     const znakPanelEl = document.getElementById('znakPanel');
-    const tlBtn = document.getElementById('addTlBtn');
-    const tlPanelEl = document.getElementById('tlPanel');
     function placeGalleryAbove() {
+        // Кнопка/панель светофора создаются в trafficlights.js позже — ищем на момент вызова
+        const tlBtn = document.getElementById('addTlBtn');
+        const tlPanelEl = document.getElementById('tlPanel');
         if (document.body.classList.contains('pdd-open')) {
             const h = pddModal.offsetHeight + 12;
             galleryBtn.style.bottom = h + 'px';
