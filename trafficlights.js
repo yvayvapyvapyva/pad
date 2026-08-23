@@ -162,6 +162,8 @@
             cell.dataset.file = file;
             cell.dataset.type = 'tl';
             cell.appendChild(createTlDom(file));
+            // в галерее светофор показан с включённым зелёным
+            cell.querySelector('.tl-lamp.tl-green').classList.add('on');
             const cap = document.createElement('div');
             cap.className = 'tl-caption';
             cap.textContent = TL_LABELS[file] || file;
@@ -183,9 +185,10 @@
         p.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' 64">');
         p.push('<rect x="' + bodyX + '" y="0" width="22" height="64" rx="6" fill="#202020" stroke="#4a4a4a" stroke-width="1.5"/>');
         const lampX = bodyX + 11;
-        [[lampX, 13], [lampX, 32], [lampX, 51]].forEach(c => {
+        // лампы: красный/жёлтый не горят, зелёный включён — как в галерее
+        [[lampX, 13, '#111'], [lampX, 32, '#111'], [lampX, 51, '#30d158']].forEach(c => {
             p.push('<circle cx="' + c[0] + '" cy="' + c[1] + '" r="7.5" fill="none" stroke="#4a4a4a" stroke-width="1"/>');
-            p.push('<circle cx="' + c[0] + '" cy="' + c[1] + '" r="7" fill="#111"/>');
+            p.push('<circle cx="' + c[0] + '" cy="' + c[1] + '" r="7" fill="' + c[2] + '"/>');
         });
         if (hasL) {
             p.push('<rect x="' + sideX + '" y="42" width="22" height="22" rx="6" fill="#202020" stroke="#4a4a4a" stroke-width="1.5"/>');
@@ -324,7 +327,8 @@
         marker._rotWrap = wrap;
         marker._select = el;
         marker._tlType = type;
-        marker._lampState = { red: false, yellow: false, green: false, left: false, right: false };
+        marker._lampState = { red: false, yellow: false, green: true, left: false, right: false };
+        tl.querySelector('.tl-lamp.tl-green').classList.add('on'); // зелёный включён по умолчанию
         marker._heading = (moveAngle != null) ? moveAngle * 180 / Math.PI + 90 - mapRot : -mapRot;
         marker._lat = lat;
         marker._lon = lon;
