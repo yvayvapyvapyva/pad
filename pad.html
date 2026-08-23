@@ -755,7 +755,7 @@ function smoothCoords(coords) {
     // сплайн Катмулла–Рома через опорные точки
     const P = [key[0]].concat(key, [key[key.length - 1]]);
     const out = [];
-    const SEG = 16;
+    const SEG = 32;
     for (let i = 1; i < P.length - 2; i++) {
         const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
         for (let j = 0; j < SEG; j++) {
