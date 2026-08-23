@@ -60,6 +60,21 @@
         }
         #pddBtn:active { transform:translateX(-50%) scale(0.92); }
         #pddBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
+        /* Режим скрытия элементов управления (долгое нажатие на ПДД) */
+        body.controls-hidden .fab:not(#pddBtn),
+        body.controls-hidden #rotateBtn,
+        body.controls-hidden #historyBtn,
+        body.controls-hidden .sig-fab,
+        body.controls-hidden #signalBtns,
+        body.controls-hidden #tlMini,
+        body.controls-hidden #picPanel,
+        body.controls-hidden #znakPanel,
+        body.controls-hidden #tlPanel,
+        body.controls-hidden #colorPanel,
+        body.controls-hidden #widthSlider,
+        body.controls-hidden #recAllBtn,
+        body.controls-hidden #playAllBtn { display:none !important; }
+        body.controls-hidden #pddBtn { background:transparent; box-shadow:none; }
         #pddModal {
             position:fixed; left:0; right:0; bottom:0; height:40vh; max-height:100vh; z-index:9100;
             background:rgba(15,15,15,0.97); color:#fff;
@@ -1702,7 +1717,34 @@ function updateAllPicMarkers(event) {
         if (open) { pddStack = [{ type: 'sections' }]; document.getElementById('pddSearch').value = ''; setSearchVisible(false); pddRender(); }
         placeGalleryAbove();
     };
-    pddBtn.addEventListener('click', togglePdd);
+    // Долгое нажатие на кнопку ПДД: скрыть/вернуть все элементы управления
+    let pddLpTimer = null, pddLpFired = false;
+    const pddLpClear = () => { if (pddLpTimer) { clearTimeout(pddLpTimer); pddLpTimer = null; } };
+    pddBtn.addEventListener('pointerdown', () => {
+        pddLpFired = false;
+        pddLpTimer = setTimeout(() => {
+            pddLpTimer = null;
+            pddLpFired = true;
+            document.body.classList.toggle('controls-hidden');
+            // при скрытии закрываем шторку и все панели
+            if (document.body.classList.contains('controls-hidden')) {
+                if (pddModal.classList.contains('visible')) togglePdd();
+                ['picPanel', 'znakPanel', 'tlPanel'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.remove('visible');
+                });
+                document.getElementById('addPicBtn').classList.remove('open');
+                document.getElementById('addZnakBtn').classList.remove('open');
+                const tlb = document.getElementById('addTlBtn');
+                if (tlb) tlb.classList.remove('open');
+            }
+        }, 500);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => pddBtn.addEventListener(ev, pddLpClear));
+    pddBtn.addEventListener('click', () => {
+        if (pddLpFired) { pddLpFired = false; return; } // это был long-press — не открываем шторку
+        togglePdd();
+    });
     document.getElementById('pddClose').addEventListener('click', togglePdd);
     document.getElementById('pddBack').addEventListener('click', () => {
         if (pddStack[pddStack.length - 1].type === 'search') { exitSearch(); return; }
