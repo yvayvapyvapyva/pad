@@ -329,7 +329,9 @@
         /* Telegram Mini App: опускаем верхние элементы ниже системных кнопок.
            Величина --tg-top задаётся из Telegram.WebApp (contentSafeAreaInset). */
         :root { --tg-top: 0px; }
-        #drawBtn, #eraserBtn, #rotateBtn, #pddBtn { top: calc(12px + env(safe-area-inset-top) + var(--tg-top)); }
+        /* Кнопка ПДД остаётся у верхнего края и не смещается на --tg-top */
+        #pddBtn { top: calc(12px + env(safe-area-inset-top)); }
+        #drawBtn, #eraserBtn, #rotateBtn { top: calc(12px + env(safe-area-inset-top) + var(--tg-top)); }
         #locateBtn, #signalBtns, #tlMini, #colorPanel { top: calc(76px + env(safe-area-inset-top) + var(--tg-top)); }
         #widthSlider { top: calc(180px + env(safe-area-inset-top) + var(--tg-top)); }
     </style>
