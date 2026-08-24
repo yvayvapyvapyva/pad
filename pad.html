@@ -994,12 +994,12 @@ function placePic(lat, lon, moveAngle) {
 // Перетаскивание с фиксацией на границе изображения.
 // Касание картинки само по себе ничего не двигает; когда палец доходит
 // до границы изображения, точка захвата фиксируется на границе в одной
-// из 4 зон (верх / низ / лево / право) и включается прежний механизм
+// из 2 зон (вперёд = верх / назад = низ) и включается механизм
 // «тянуть-вращать»: машинка едет по дуге за пальцем.
 function setupTopDrag(marker) {
     const el = marker._select;
     // Смещение угла курса для каждой зоны захвата
-    const ZONE_OFF = { top: 90, bottom: -90, left: 180, right: 0 };
+    const ZONE_OFF = { top: 90, bottom: -90 };
     let armed = false, active = false, pid = -1;
     let cx = 0, cy = 0, offX = 0, offY = 0, downHD = 0, prevHD = 0, downH = 0, sideOff = 90;
     let downLat = 0, downLon = 0, downHeading = 0;
@@ -1023,7 +1023,8 @@ function setupTopDrag(marker) {
 
     // Фиксация на границе изображения: зона + точка захвата. false — ещё внутри.
     // Зона выбирается не по стороне перехода, а по направлению движения пальца:
-    // активной становится та сторона, чья нормаль лучше совпадает с вектором движения.
+    // активной становится та сторона (вперёд/назад), чья нормаль лучше совпадает
+    // с вектором движения.
     const tryEngage = (e, mvx, mvy) => {
         const rect = marker._rotWrap.getBoundingClientRect();
         cx = rect.left + rect.width / 2;
@@ -1039,9 +1040,9 @@ function setupTopDrag(marker) {
         // Вектор движения в локальных координатах изображения
         const vx = mvx * cosT + mvy * sinT;
         const vy = -mvx * sinT + mvy * cosT;
-        // Нормали сторон: верх (0,-1), низ (0,1), лево (-1,0), право (1,0)
+        // Нормали сторон: вперёд (0,-1), назад (0,1)
         let best = -Infinity, zone = 'top';
-        [[0, -1, 'top'], [0, 1, 'bottom'], [-1, 0, 'left'], [1, 0, 'right']].forEach(c => {
+        [[0, -1, 'top'], [0, 1, 'bottom']].forEach(c => {
             const dot = vx * c[0] + vy * c[1];
             if (dot > best) { best = dot; zone = c[2]; }
         });
@@ -1087,19 +1088,7 @@ function setupTopDrag(marker) {
         if (!active || e.pointerId !== pid) return;
         const mpp = metersPerPixel(marker._lat);
         const R = mapRot * Math.PI / 180;
-        // Боковой захват (лево/право): чистое перемещение за пальцем, без поворота
-        if (sideOff === 0 || sideOff === 180) {
-            const dx = e.clientX - lastX, dy = e.clientY - lastY;
-            lastX = e.clientX; lastY = e.clientY;
-            const dEast = (dx * Math.cos(R) + dy * Math.sin(R)) * mpp;
-            const dNorth = (dx * Math.sin(R) - dy * Math.cos(R)) * mpp;
-            marker._lat += dNorth / 111320;
-            marker._lon += dEast / (111320 * Math.cos(marker._lat * Math.PI / 180));
-            marker.update({ coordinates: [marker._lon, marker._lat] });
-            updatePicMarker(marker);
-            return;
-        }
-        // Передний/задний захват (верх/низ): езда по дуге с поворотом курса
+        // Захват вперёд/назад: езда по дуге с поворотом курса
         const h = downH;
         let rot = (prevHD - downHD) * Math.PI / 180;
         let hx = e.clientX - (offX * Math.cos(rot) - offY * Math.sin(rot));
