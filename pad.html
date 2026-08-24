@@ -212,7 +212,7 @@
         }
         #tlMini.visible { display:flex; }
         .tlm-body {
-            width:36px; padding:7px 0; background:#202020; border:1.5px solid #4a4a4a;
+            width:36px; padding:7px 0; background:#202020; border:1px solid #fff;
             border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:9px;
             box-shadow:0 8px 32px rgba(0,0,0,0.3);
         }
@@ -229,7 +229,7 @@
         .tlm-side {
             position:absolute; bottom:0;
             display:none; align-items:center; justify-content:center;
-            width:34px; height:34px; background:#202020; border:2px solid #4a4a4a;
+            width:34px; height:34px; background:#202020; border:1px solid #fff;
             border-radius:9px; color:#111; cursor:pointer; touch-action:manipulation;
         }
         .tlm-side[data-key="left"] { right:100%; }
@@ -250,7 +250,8 @@
             background:rgba(255,204,0,0.5); border-color:#FFD60A; color:#fff;
             box-shadow:0 0 16px 4px rgba(255,204,0,0.55);
         }
-        #signLegBtn.active {
+        #signLegBtn.active,
+        #tlLegBtn.active {
             background:rgba(255,255,255,0.3); border-color:#fff;
             box-shadow:0 0 8px 2px rgba(255,255,255,0.45);
         }
@@ -422,6 +423,7 @@
         <div class="tlm-side" data-key="left"><svg viewBox="0 0 22 10" width="34" height="15.6"><rect x="11" y="3" width="7" height="4" fill="currentColor"/><polygon points="11,1 4,5 11,9" fill="currentColor"/></svg></div>
         <div class="tlm-side" data-key="right"><svg viewBox="0 0 22 10" width="34" height="15.6"><rect x="4" y="3" width="7" height="4" fill="currentColor"/><polygon points="11,1 18,5 11,9" fill="currentColor"/></svg></div>
     </div>
+    <div class="sig-fab" id="tlLegBtn"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="9" y="2" width="6" height="20" rx="3" fill="#8E8E93" stroke="#fff" stroke-width="1"/></svg></div>
     <div class="sig-fab danger" id="tlDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
 </div>
 
@@ -802,13 +804,14 @@ function restoreScene(snap) {
                 m._leg = leg;
             }
         }
-        if (d.rec) {
-            m._samples = d.rec.samples;
-            m._startTrim = d.rec.st;
-            m._endTrim = d.rec.et;
-            m._phaseOffset = d.rec.po;
-            m._signals = d.rec.sig;
-        }
+            if (d.rec) {
+                m._samples = d.rec.samples;
+                m._startTrim = d.rec.st;
+                m._endTrim = d.rec.et;
+                m._phaseOffset = d.rec.po;
+                m._signals = d.rec.sig;
+            }
+            if (d.leg && m._isTl && window.toggleTlLeg) window.toggleTlLeg(m);
     });
     if (activeCar && placedMarkers.indexOf(activeCar) === -1) activeCar = null;
     if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.add('car-active');
@@ -885,6 +888,7 @@ function updateSignalBtns() {
         mini.classList.toggle('has-left', activeCar._tlType === 'arrow-left');
         ml.classList.toggle('on', !!activeCar._lampState.left);
         mr.classList.toggle('on', !!activeCar._lampState.right);
+        document.getElementById('tlLegBtn').classList.toggle('active', isTl && !!activeCar._leg);
     }
     box.classList.toggle('visible', !!activeCar && !isTl && !drawMode && !eraserMode);
     // У знака вместо поворотников — кнопка ножки
@@ -1551,6 +1555,11 @@ function updateAllPicMarkers(event) {
             window.tlSetLamp(activeCar, key, !activeCar._lampState[key]);
             updateSignalBtns();
         });
+    });
+    document.getElementById('tlLegBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar && activeCar._isTl && window.toggleTlLeg) window.toggleTlLeg(activeCar);
     });
     document.getElementById('tlDelBtn').addEventListener('pointerdown', e => {
         e.preventDefault();

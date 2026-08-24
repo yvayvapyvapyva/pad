@@ -47,7 +47,7 @@
 
         .tl { position:relative; width:22px; height:64px; }
         .tl-body {
-            position:absolute; inset:0; background:#202020; border:1.5px solid #4a4a4a;
+            position:absolute; inset:0; background:#202020; border:1px solid #fff;
             border-radius:6px; display:flex; flex-direction:column; align-items:center;
             box-shadow:inset 0 0 6px rgba(0,0,0,0.6);
         }
@@ -60,7 +60,7 @@
         .tl-lamp.on.tl-green { background:#30d158; box-shadow:0 0 8px 3px rgba(48,209,88,0.85); }
         .tl-side {
             position:absolute; bottom:0;
-            width:22px; height:22px; background:#202020; border:1.5px solid #4a4a4a;
+            width:22px; height:22px; background:#202020; border:1px solid #fff;
             border-radius:6px; display:flex; align-items:center; justify-content:center;
         }
         .tl-side-left { right:100%; }
@@ -183,7 +183,7 @@
         const sideX = hasL ? 0 : 44;
         const p = [];
         p.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' 64">');
-        p.push('<rect x="' + bodyX + '" y="0" width="22" height="64" rx="6" fill="#202020" stroke="#4a4a4a" stroke-width="1.5"/>');
+        p.push('<rect x="' + bodyX + '" y="0" width="22" height="64" rx="6" fill="#202020" stroke="#fff" stroke-width="1"/>');
         const lampX = bodyX + 11;
         // лампы: красный/жёлтый не горят, зелёный включён — как в галерее
         [[lampX, 13, '#111'], [lampX, 32, '#111'], [lampX, 51, '#30d158']].forEach(c => {
@@ -191,12 +191,12 @@
             p.push('<circle cx="' + c[0] + '" cy="' + c[1] + '" r="7" fill="' + c[2] + '"/>');
         });
         if (hasL) {
-            p.push('<rect x="' + sideX + '" y="42" width="22" height="22" rx="6" fill="#202020" stroke="#4a4a4a" stroke-width="1.5"/>');
+            p.push('<rect x="' + sideX + '" y="42" width="22" height="22" rx="6" fill="#202020" stroke="#fff" stroke-width="1"/>');
             p.push('<rect x="' + (sideX + 11) + '" y="51" width="7" height="4" fill="#111"/>');
             p.push('<polygon points="' + (sideX + 11) + ',49 ' + (sideX + 4) + ',53 ' + (sideX + 11) + ',57" fill="#111"/>');
         }
         if (hasR) {
-            p.push('<rect x="' + sideX + '" y="42" width="22" height="22" rx="6" fill="#202020" stroke="#4a4a4a" stroke-width="1.5"/>');
+            p.push('<rect x="' + sideX + '" y="42" width="22" height="22" rx="6" fill="#202020" stroke="#fff" stroke-width="1"/>');
             p.push('<rect x="' + (sideX + 4) + '" y="51" width="7" height="4" fill="#111"/>');
             p.push('<polygon points="' + (sideX + 11) + ',49 ' + (sideX + 18) + ',53 ' + (sideX + 11) + ',57" fill="#111"/>');
         }
@@ -281,6 +281,24 @@
         });
     }
 
+    // Ножка светофора: добавить/убрать (как у знаков). Высота ножки задаётся
+    // в updateTlMarker относительно видимого размера корпуса.
+    window.toggleTlLeg = function (marker) {
+        if (!marker || !marker._isTl) return;
+        if (marker._leg) {
+            marker._leg.remove();
+            marker._leg = null;
+        } else {
+            const leg = document.createElement('div');
+            leg.className = 'sign-leg';
+            marker._rotWrap.appendChild(leg);
+            marker._leg = leg;
+            window.updateTlMarker(marker);
+        }
+        if (window.updateSignalBtns) window.updateSignalBtns();
+        if (window.commit) window.commit();
+    };
+
     // Включение сигналов нажатием на лампы (работает в режиме управления)
     function setupLampTaps(marker) {
         marker._tlRoot.querySelectorAll('.tl-lamp, .tl-side').forEach(el => {
@@ -355,6 +373,14 @@
         marker._tlPx = pxH;
         marker._tlScale = pxH / TL_BASE_H; // для расчёта границы в setupTopDrag
         marker._tlRoot.style.transform = 'scale(' + marker._tlScale + ')';
+        // Ножка: верхние 35% прячутся под корпус (ножка на слое позади).
+        // Координаты — от layout-верха rotWrap (64px), визуальный центр корпуса на 32px.
+        if (marker._leg) {
+            const overlap = pxH * 0.35;
+            marker._leg.style.top = ((TL_BASE_H - pxH) / 2 + pxH * 0.65) + 'px';
+            marker._leg.style.height = (pxH * 1.35 / 2) + 'px';
+            marker._leg.style.width = Math.max(2, pxH * 0.09) + 'px';
+        }
         // Панель управления привязана к низу видимого корпуса
         if (marker._ctrl) marker._ctrl.style.top = 'calc(100% + ' + ((pxH - TL_BASE_H) / 2 + 8) + 'px)';
     };
