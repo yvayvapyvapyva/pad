@@ -156,6 +156,10 @@
     `;
     document.head.appendChild(style);
 
+    // SVG-иконки кнопки PLAY/STOP
+    const ICON_PLAY = '<svg viewBox="0 0 24 24" width="26" height="26" fill="#fff"><path d="M7.5 4.2v15.6L20.5 12z"/></svg>';
+    const ICON_STOP = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>';
+
     const recAllBtn = document.createElement('div');
     recAllBtn.id = 'recAllBtn';
     recAllBtn.innerHTML = 'REC';
@@ -163,7 +167,7 @@
 
     const playAllBtn = document.createElement('div');
     playAllBtn.id = 'playAllBtn';
-    playAllBtn.innerHTML = '&#9654;';
+    playAllBtn.innerHTML = ICON_PLAY;
     document.body.appendChild(playAllBtn);
 
     // ---- Состояние ----
@@ -799,7 +803,7 @@
         const any = playables().length > 0;
         playAllBtn.style.display = any ? 'flex' : 'none';
         playAllBtn.classList.toggle('active', _playAll);
-        playAllBtn.innerHTML = _playAll ? '&#9632;' : '&#9654;';
+        playAllBtn.innerHTML = _playAll ? ICON_STOP : ICON_PLAY;
     }
 
     recAllBtn.addEventListener('click', toggleRec);
