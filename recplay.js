@@ -329,7 +329,7 @@
             } else {
                 t = now - _recStart;
             }
-            m._samples.push({ t, lat: m._lat, lon: m._lon, heading: m._heading });
+            m._samples.push({ t: Math.round(t), lat: m._lat, lon: m._lon, heading: m._heading });
         });
         _recRaf = requestAnimationFrame(recFrame);
     }
@@ -401,6 +401,8 @@
             if (m._prevSamples && !hasMovement(m)) {
                 m._samples = m._prevSamples; // тронули, но не сдвинули — вернуть старую запись
             } else if (m._recActive && hasMovement(m)) {
+                // Финальная точка с текущим положением — чтобы endTrim/последний t были точными
+                m._samples.push({ t: Math.round(tEnd), lat: m._lat, lon: m._lon, heading: m._heading });
                 m._startTrim = 0;      // свежая запись — диапазон целиком
                 m._endTrim = undefined;
             }
