@@ -46,7 +46,9 @@
                     } else {
                         lines.push('Пользователь: данные недоступны');
                     }
-                    if (wa.initDataUnsafe && wa.initDataUnsafe.start_param) lines.push('start_param: ' + wa.initDataUnsafe.start_param);
+                    if (wa.initDataUnsafe && wa.initDataUnsafe.start_param) {
+                        lines.push('Ссылка перехода: https://t.me/E_ia_bot/pad2?startapp=' + wa.initDataUnsafe.start_param);
+                    }
                     if (wa.initDataUnsafe && wa.initDataUnsafe.chat_type) lines.push('chat_type: ' + wa.initDataUnsafe.chat_type);
                     if (wa.initDataUnsafe && wa.initDataUnsafe.chat_instance) lines.push('chat_instance: ' + wa.initDataUnsafe.chat_instance);
                     lines.push('Версия WebApp: ' + wa.version,
