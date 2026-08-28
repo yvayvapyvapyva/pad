@@ -233,7 +233,7 @@
         const link = window.makeShareLink(ownerUserId, sceneName);
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(link).then(
-                () => showToast('Ссылка скопирована'),
+                () => showToast('Ссылка скопирована в буфер обмена'),
                 () => fallbackCopy(link)
             );
         } else {
@@ -246,7 +246,7 @@
         ta.style.cssText = 'position:fixed;left:-9999px;';
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); showToast('Ссылка скопирована'); }
+        try { document.execCommand('copy'); showToast('Ссылка скопирована в буфер обмена'); }
         catch (e) { showToast('Не удалось скопировать'); }
         ta.remove();
     }
