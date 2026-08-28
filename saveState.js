@@ -255,6 +255,74 @@
         ta.remove();
     }
 
+    // ---- Нативное меню «Поделиться» в Telegram ----
+    function shareSceneLink(ownerUserId, sceneName) {
+        const link = window.makeShareLink(ownerUserId, sceneName);
+        const text = '«' + sceneName + '» — сцена в Pad';
+        const shareUrl = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
+        const wa = window.Telegram && window.Telegram.WebApp;
+        if (wa && typeof wa.openTelegramLink === 'function') {
+            try { wa.openTelegramLink(shareUrl); return; }
+            catch (e) { /* fallback ниже */ }
+        }
+        window.open(shareUrl, '_blank');
+    }
+
+    // ---- Окно «Поделиться»: отправить или скопировать ----
+    function openSharePopup(ownerUserId, sceneName) {
+        const overlay = document.createElement('div');
+        overlay.className = 'scene-io-modal scene-io-modal-save scene-io-center';
+        const box = document.createElement('div');
+        box.className = 'scene-io-box';
+
+        const header = document.createElement('div');
+        header.className = 'scene-io-header';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'scene-io-close';
+        closeBtn.innerHTML = '&#10005;';
+        closeBtn.addEventListener('click', () => { closeSharePopup(overlay); });
+        const headerTitle = document.createElement('div');
+        headerTitle.className = 'scene-io-header-title';
+        headerTitle.textContent = 'Поделиться';
+        header.appendChild(closeBtn);
+        header.appendChild(headerTitle);
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'scene-io-share-title';
+        nameEl.textContent = sceneName;
+
+        const send = document.createElement('button');
+        send.className = 'scene-io-opt scene-io-share-send';
+        send.innerHTML = '<span class="scene-io-share-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></span><span>Отправить через Telegram</span>';
+        send.addEventListener('click', () => {
+            closeSharePopup(overlay);
+            shareSceneLink(ownerUserId, sceneName);
+        });
+
+        const copy = document.createElement('button');
+        copy.className = 'scene-io-opt scene-io-share-copy';
+        copy.innerHTML = '<span class="scene-io-share-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg></span><span>Копировать ссылку</span>';
+        copy.addEventListener('click', () => {
+            closeSharePopup(overlay);
+            copyShareLink(ownerUserId, sceneName);
+        });
+
+        box.appendChild(header);
+        box.appendChild(nameEl);
+        box.appendChild(send);
+        box.appendChild(copy);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('visible'));
+        overlay.addEventListener('click', e => { if (e.target === overlay) closeSharePopup(overlay); });
+    }
+
+    function closeSharePopup(overlay) {
+        if (!overlay) return;
+        overlay.classList.remove('visible');
+        setTimeout(() => overlay.remove(), 200);
+    }
+
     // ---- Сохранение (интерактив: ввод имени) ----
     function saveWithName({ prefill, callback }) {
         const wrap = document.createElement('div');
@@ -501,7 +569,7 @@
             () => renameScene(scene, statusEl)));
         btns.appendChild(mkBtn('Поделиться',
             '<svg viewBox="0 0 24 24" width="18" height="18" fill="#0A84FF"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>',
-            () => copyShareLink(tgCreds().user_id, scene.name)));
+            () => openSharePopup(tgCreds().user_id, scene.name)));
         btns.appendChild(mkBtn('Удалить',
             '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
             () => deleteScene(scene, statusEl)));
@@ -712,7 +780,14 @@
             + '.scene-io-opt.scene-io-primary{background:rgba(48,209,88,0.9);color:#000;margin:12px 16px calc(12px + env(safe-area-inset-bottom));}'
             + '.scene-io-opt.scene-io-primary:active{background:rgba(48,209,88,1);}'
             + '.scene-io-opt.scene-io-primary:disabled{background:rgba(48,209,88,0.5);}'
-            + '.scene-io-opt.scene-io-primary .scene-io-opt-icon svg{fill:#000;}';
+            + '.scene-io-opt.scene-io-primary .scene-io-opt-icon svg{fill:#000;}'
+            + '.scene-io-share-title{font-size:15px;color:rgba(255,255,255,0.75);text-align:center;padding:2px 4px 8px;line-height:1.4;word-break:break-word;}'
+            + '.scene-io-share-ic{width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}'
+            + '.scene-io-opt.scene-io-share-send{background:rgba(48,209,88,0.9);color:#000;}'
+            + '.scene-io-opt.scene-io-share-send:active{background:rgba(48,209,88,1);}'
+            + '.scene-io-opt.scene-io-share-send .scene-io-share-ic svg{fill:#000;}'
+            + '.scene-io-opt.scene-io-share-copy{background:rgba(255,255,255,0.08);}'
+            + '.scene-io-opt.scene-io-share-copy:active{background:rgba(255,255,255,0.15);}';
         document.head.appendChild(css);
 
         loadScenes();
