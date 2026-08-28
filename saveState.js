@@ -346,9 +346,17 @@
         const box = document.createElement('div');
         box.className = 'scene-io-box';
 
-        const t = document.createElement('div');
-        t.className = 'scene-io-title';
-        t.textContent = title;
+        const header = document.createElement('div');
+        header.className = 'scene-io-header';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'scene-io-close';
+        closeBtn.innerHTML = '&#10005;';
+        closeBtn.addEventListener('click', () => closeM(wrap));
+        const headerTitle = document.createElement('div');
+        headerTitle.className = 'scene-io-header-title';
+        headerTitle.textContent = title;
+        header.appendChild(closeBtn);
+        header.appendChild(headerTitle);
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -365,7 +373,7 @@
         const status = document.createElement('div');
         status.className = 'scene-io-status';
 
-        box.appendChild(t);
+        box.appendChild(header);
         box.appendChild(input);
         box.appendChild(ok);
         box.appendChild(status);
@@ -401,9 +409,17 @@
         const box = document.createElement('div');
         box.className = 'scene-io-box';
 
-        const t = document.createElement('div');
-        t.className = 'scene-io-title';
-        t.textContent = title;
+        const header = document.createElement('div');
+        header.className = 'scene-io-header';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'scene-io-close';
+        closeBtn.innerHTML = '&#10005;';
+        closeBtn.addEventListener('click', () => closeM(wrap));
+        const headerTitle = document.createElement('div');
+        headerTitle.className = 'scene-io-header-title';
+        headerTitle.textContent = title;
+        header.appendChild(closeBtn);
+        header.appendChild(headerTitle);
 
         const msg = document.createElement('div');
         msg.className = 'scene-io-confirm-msg';
@@ -413,7 +429,7 @@
         ok.className = 'scene-io-opt scene-io-danger';
         ok.textContent = okText || 'Удалить';
 
-        box.appendChild(t);
+        box.appendChild(header);
         box.appendChild(msg);
         box.appendChild(ok);
         wrap.appendChild(box);
@@ -735,7 +751,7 @@
             + '.scene-io-confirm-msg{font-size:15px;color:rgba(255,255,255,0.75);text-align:center;padding:14px 24px 16px;line-height:1.5;user-select:none;-webkit-user-select:none;}'
             + '.scene-io-opt.scene-io-danger{background:rgba(255,69,58,0.15);color:#FF453A;}'
             + '.scene-io-opt.scene-io-danger:active{background:rgba(255,69,58,0.25);}'
-            + '.scene-io-opt.scene-io-primary{background:rgba(48,209,88,0.9);color:#000;margin-top:12px;}'
+            + '.scene-io-opt.scene-io-primary{background:rgba(48,209,88,0.9);color:#000;margin:12px 16px calc(12px + env(safe-area-inset-bottom));}'
             + '.scene-io-opt.scene-io-primary:active{background:rgba(48,209,88,1);}'
             + '.scene-io-opt.scene-io-primary:disabled{background:rgba(48,209,88,0.5);}'
             + '.scene-io-opt.scene-io-primary .scene-io-opt-icon svg{fill:#000;}';
