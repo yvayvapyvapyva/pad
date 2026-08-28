@@ -9,6 +9,16 @@
 
     const API_URL = 'https://functions.yandexcloud.net/d4eurq94s2t0svq2jpu4';
 
+    // Telegram-контекст: user_id и init_data (подписанные данные для проверки на сервере)
+    function tgCreds() {
+        const wa = window.Telegram && window.Telegram.WebApp;
+        const user = wa && wa.initDataUnsafe && wa.initDataUnsafe.user;
+        return {
+            user_id: user ? String(user.id) : '',
+            init_data: wa ? (wa.initData || '') : ''
+        };
+    }
+
     // Отдельные карточки машинок могут иметь записанные движения
     // (recplay.js: _samples/_startTrim/_endTrim/_phaseOffset/_signals).
     // serializeScene() уже кладёт их в поле "rec" каждого маркера.
@@ -43,6 +53,12 @@
     }
 
     async function api(method, { body, query } = {}) {
+        const creds = tgCreds();
+        // Для GET/DELETE передаём user_id и init_data в query-строке
+        if (query) {
+            if (creds.user_id && query.user_id == null) query.user_id = creds.user_id;
+            if (creds.init_data && query.initData == null) query.initData = creds.init_data;
+        }
         let url = API_URL;
         if (query && Object.keys(query).length) {
             const qs = Object.keys(query)
@@ -52,7 +68,12 @@
             if (qs) url += '?' + qs;
         }
         const opts = { method: method, headers: { 'Content-Type': 'application/json' } };
-        if (body !== undefined) opts.body = JSON.stringify(body);
+        if (body !== undefined) {
+            const full = Object.assign({}, body);
+            if (creds.user_id) full.user_id = creds.user_id;
+            if (creds.init_data) full.init_data = creds.init_data;
+            opts.body = JSON.stringify(full);
+        }
         const resp = await fetch(url, opts);
         const json = await resp.json().catch(() => ({}));
         if (!resp.ok || json.ok === false) throw new Error(json.error || ('Ошибка ' + resp.status));
