@@ -224,6 +224,24 @@
         return a + d * t;
     }
 
+    // Пороги прореживания записи: точка пишется если прошло >= REC_MIN_DT и
+    // машинка сдвинулась/повернулась сверх порогов, либо принудительно раз в REC_MAX_DT.
+    const REC_MIN_DT = 100;   // мс — минимальный интервал между точками при движении
+    const REC_MAX_DT = 1000;  // мс — форс-точка, чтобы трек по времени шёл правильно
+    const REC_DLAT = 1e-6;    // порог изменения широты/долготы
+    const REC_DHEAD = 0.1;    // порог изменения поворота (градусы)
+
+    function angDiff(a, b) {
+        let d = ((a - b + 180) % 360 + 360) % 360 - 180;
+        return Math.abs(d);
+    }
+
+    function movedSince(last, m) {
+        return Math.abs(m._lat - last.lat) > REC_DLAT ||
+               Math.abs(m._lon - last.lon) > REC_DLAT ||
+               angDiff(m._heading, last.heading) > REC_DHEAD;
+    }
+
     function hasMovement(m) {
         const s = m._samples;
         if (!s || s.length < 2) return false;
@@ -329,7 +347,14 @@
             } else {
                 t = now - _recStart;
             }
-            m._samples.push({ t, lat: m._lat, lon: m._lon, heading: m._heading });
+            const s = m._samples;
+            const last = s[s.length - 1];
+            if (last) {
+                const dt = t - last.t;
+                if (dt < REC_MIN_DT) return;                 // ещё рано
+                if (dt < REC_MAX_DT && !movedSince(last, m)) return; // нет движения — форс-точка не нужна
+            }
+            m._samples.push({ t: Math.round(t), lat: m._lat, lon: m._lon, heading: m._heading });
         });
         _recRaf = requestAnimationFrame(recFrame);
     }
@@ -398,11 +423,14 @@
         const tEnd = _playAll ? _maxDur : (performance.now() - _recStart);
         placedMarkers.forEach(m => {
             closeAllRecSigs(m, tEnd);
-            if (m._prevSamples && !hasMovement(m)) {
-                m._samples = m._prevSamples; // тронули, но не сдвинули — вернуть старую запись
-            } else if (m._recActive && hasMovement(m)) {
+            const hadNew = m._recActive && hasMovement(m);
+            if (hadNew) {
+                // Финальная точка с текущим положением — чтобы endTrim/последний t были точными
+                m._samples.push({ t: Math.round(tEnd), lat: m._lat, lon: m._lon, heading: m._heading });
                 m._startTrim = 0;      // свежая запись — диапазон целиком
                 m._endTrim = undefined;
+            } else if (m._prevSamples) {
+                m._samples = m._prevSamples; // тронули, но не сдвинули — вернуть старую запись
             }
             m._prevSamples = undefined;
         });

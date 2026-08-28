@@ -789,6 +789,29 @@ function hexToRgba(hex, alpha) {
 const MAX_HISTORY = 30;
 let undoStack = [], redoStack = [], _restoring = false;
 
+// Упаковка семплов записи движения в плоский массив чисел с округлением,
+// чтобы уменьшить размер JSON-сериализации сцены.
+function packRecSamples(samples) {
+    const arr = [];
+    for (let i = 0; i < samples.length; i++) {
+        const s = samples[i];
+        arr.push(Math.round(s.t));
+        arr.push(Number(s.lat.toFixed(6)));
+        arr.push(Number(s.lon.toFixed(6)));
+        arr.push(Number(s.heading.toFixed(1)));
+    }
+    return arr;
+}
+
+// Распаковка плоского массива обратно в массив объектов {t, lat, lon, heading}.
+function unpackRecSamples(arr) {
+    const out = [];
+    for (let i = 0; i + 3 < arr.length; i += 4) {
+        out.push({ t: arr[i], lat: arr[i + 1], lon: arr[i + 2], heading: arr[i + 3] });
+    }
+    return out;
+}
+
 function serializeScene() {
     return {
         lines: drawnLines.map(l => ({ coords: l.coords.map(c => c.slice()), color: l.color || '#000000', width: l.width || 5 })),
@@ -798,7 +821,7 @@ function serializeScene() {
             lat: m._lat, lon: m._lon,
             heading: m._heading,
             leg: !!m._leg,
-            rec: (m._samples && m._samples.length) ? { samples: m._samples, st: m._startTrim || 0, et: (m._endTrim != null ? m._endTrim : m._samples[m._samples.length - 1].t), po: m._phaseOffset || 0, sig: m._signals || [] } : null
+            rec: (m._samples && m._samples.length) ? { format: 2, samples: packRecSamples(m._samples), st: m._startTrim || 0, et: (m._endTrim != null ? m._endTrim : m._samples[m._samples.length - 1].t), po: m._phaseOffset || 0, sig: m._signals || [] } : null
         }))
     };
 }
@@ -839,7 +862,7 @@ function restoreScene(snap) {
             }
         }
             if (d.rec) {
-                m._samples = d.rec.samples;
+                m._samples = (d.rec.format === 2) ? unpackRecSamples(d.rec.samples) : d.rec.samples;
                 m._startTrim = d.rec.st;
                 m._endTrim = d.rec.et;
                 m._phaseOffset = d.rec.po;
