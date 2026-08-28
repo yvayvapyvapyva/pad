@@ -2056,5 +2056,42 @@ function initCustomPinchRotate() {
 <script src="recplay.js"></script>
 <script src="trafficlights.js"></script>
 <script src="saveState.js"></script>
+<script>
+// Обработка deep-link: сцена по ссылке t.me/E_ia_bot/pad2?startapp=<payload>.
+// payload — base64url(ownerUserId:sceneName). Загружаем чужую сцену напрямую.
+(function () {
+    function b64urlDecode(s) {
+        if (!s) return null;
+        s = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        try {
+            return decodeURIComponent(escape(atob(s)));
+        } catch (e) { return null; }
+    }
+
+    function handleStartParam() {
+        const wa = window.Telegram && window.Telegram.WebApp;
+        const param = wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param;
+        if (!param) return;
+        const decoded = b64urlDecode(param);
+        if (!decoded) return;
+        const idx = decoded.indexOf(':');
+        if (idx === -1) return;
+        const ownerUserId = decoded.slice(0, idx);
+        const sceneName = decoded.slice(idx + 1);
+        if (!ownerUserId || !sceneName) return;
+        if (!window.loadSharedScene) return;
+        // Ждём готовности карты
+        if (window.map) {
+            window.loadSharedScene(ownerUserId, sceneName);
+        } else {
+            const t = setInterval(() => {
+                if (window.map) { clearInterval(t); window.loadSharedScene(ownerUserId, sceneName); }
+            }, 500);
+        }
+    }
+    handleStartParam();
+})();
+</script>
 </body>
 </html>

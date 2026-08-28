@@ -15,9 +15,21 @@
     window.sceneIoInit = true;
 
     const API_URL = 'https://functions.yandexcloud.net/d4eurq94s2t0svq2jpu4';
+    const BOT_LINK = 'https://t.me/E_ia_bot/pad2';
 
     // Имя активной (загруженной на карту) сцены. null — активной сцены нет.
     let activeSceneName = null;
+
+    // ---- Base64URL кодирование/декодирование для startapp параметра ----
+    function b64urlEncode(str) {
+        return btoa(unescape(encodeURIComponent(str)))
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function b64urlDecode(s) {
+        s = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        return decodeURIComponent(escape(atob(s)));
+    }
 
     // Telegram-контекст: user_id и init_data (подписанные данные для проверки на сервере)
     function tgCreds() {
@@ -154,6 +166,63 @@
         }
 
         activeSceneName = name || null;
+    }
+
+    // ---- Toast-уведомление ----
+    function showToast(text, duration) {
+        duration = duration || 2000;
+        const t = document.createElement('div');
+        t.textContent = text;
+        t.style.cssText = 'position:fixed;bottom:calc(100px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);'
+            + 'z-index:9999;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;'
+            + 'background:rgba(48,209,88,0.95);color:#fff;pointer-events:none;'
+            + 'box-shadow:0 4px 16px rgba(0,0,0,0.4);transition:opacity .3s;white-space:nowrap;';
+        document.body.appendChild(t);
+        setTimeout(() => { t.style.opacity = '0'; }, duration);
+        setTimeout(() => t.remove(), duration + 300);
+    }
+
+    // ---- Загрузка чужой сцены (shared) ----
+    window.loadSharedScene = async function (ownerUserId, sceneName) {
+        try {
+            const got = await api('GET', { query: { owner_user_id: ownerUserId, name: sceneName } });
+            let data = got.data;
+            if (typeof data === 'string') data = JSON.parse(data);
+            if (!data) { showToast('Сцена не найдена'); return; }
+            applyScene(data, null);
+            activeSceneName = null;
+        } catch (e) {
+            showToast('Ошибка загрузки: ' + e.message);
+        }
+    };
+
+    // ---- Кодирование deep-link ссылки ----
+    window.makeShareLink = function (ownerUserId, sceneName) {
+        const payload = b64urlEncode(ownerUserId + ':' + sceneName);
+        return BOT_LINK + '?startapp=' + encodeURIComponent(payload);
+    };
+
+    // ---- Копирование в буфер + тост ----
+    function copyShareLink(ownerUserId, sceneName) {
+        const link = window.makeShareLink(ownerUserId, sceneName);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(
+                () => showToast('Ссылка скопирована'),
+                () => fallbackCopy(link)
+            );
+        } else {
+            fallbackCopy(link);
+        }
+    }
+    function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showToast('Ссылка скопирована'); }
+        catch (e) { showToast('Не удалось скопировать'); }
+        ta.remove();
     }
 
     // ---- Сохранение (интерактив: ввод имени) ----
@@ -445,11 +514,15 @@
             const renameBtn = mkBtn('Переименовать',
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
                 () => renameScene(scene, statusEl));
+            const shareBtn = mkBtn('Поделиться',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#0A84FF"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>',
+                () => copyShareLink(tgCreds().user_id, scene.name));
             const delBtn = mkBtn('Удалить',
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
                 () => deleteScene(scene, statusEl));
 
             btns.appendChild(renameBtn);
+            btns.appendChild(shareBtn);
             btns.appendChild(delBtn);
             main.appendChild(btns);
             row.appendChild(main);
@@ -560,6 +633,9 @@
             btns.appendChild(mkBtn('Переименовать',
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
                 () => renameScene(scene, status)));
+            btns.appendChild(mkBtn('Поделиться',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#0A84FF"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>',
+                () => copyShareLink(tgCreds().user_id, scene.name)));
             btns.appendChild(mkBtn('Удалить',
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
                 () => deleteScene(scene, status)));

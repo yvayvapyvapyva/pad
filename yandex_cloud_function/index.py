@@ -188,8 +188,9 @@ def _rename_scene(session: ydb.Session, user_id: str, old_name: str, new_name: s
 
 # ---------- Проверка Telegram initData ----------
 
-def _extract_user_id(body) -> str:
-    """Возвращает валидированный user_id, иначе бросает исключение."""
+def _extract_user_id(body, required=True) -> str:
+    """Возвращает валидированный user_id. Если required=False — допускает
+    отсутствие user_id (для GET-запросов с owner_user_id)."""
     init_data = (body.get("init_data") if isinstance(body, dict) else None) \
         or (body.get("initData") if isinstance(body, dict) else None)
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -197,11 +198,12 @@ def _extract_user_id(body) -> str:
     if init_data and token:
         user = _validate_init_data(init_data, token)
         if user is None or "id" not in user:
-            raise PermissionError("Не удалось проверить подпись Telegram initData")
+            if required:
+                raise PermissionError("Не удалось проверить подпись Telegram initData")
+            return None
         return str(user["id"])
 
     if init_data:
-        # Токена нет — пробуем хотя бы вытащить user из init_data (не доверяем подписи)
         parsed = urllib.parse.parse_qs(init_data)
         user_json = parsed.get("user", [None])[0]
         if user_json:
@@ -216,7 +218,9 @@ def _extract_user_id(body) -> str:
     if provided:
         return str(provided)
 
-    raise ValueError("Не удалось определить user_id")
+    if required:
+        raise ValueError("Не удалось определить user_id")
+    return None
 
 
 def _validate_init_data(init_data: str, bot_token: str):
@@ -286,13 +290,16 @@ def handler(event, context):
 
     driver = None
     try:
-        user_id = _extract_user_id(merged)
+        owner_user_id = merged.get("owner_user_id")
+        is_shared_get = method == "GET" and name and owner_user_id
+        user_id = _extract_user_id(merged, required=(not is_shared_get))
         driver = ydb.Driver(_driver())
         driver.wait(timeout=10)
         with ydb.SessionPool(driver, size=1) as pool:
             def run(session):
                 _ensure_table(session)
-                return _dispatch(session, method, user_id, name, body)
+                return _dispatch(session, method, user_id, name, body,
+                                 owner_user_id=owner_user_id)
             result = pool.retry_operation_sync(run)
         return _ok(result)
     except Exception as e:
@@ -305,7 +312,7 @@ def handler(event, context):
                 pass
 
 
-def _dispatch(session, method, user_id, name, body):
+def _dispatch(session, method, user_id, name, body, owner_user_id=None):
     if method == "POST":
         if not name:
             raise ValueError("Параметр 'name' обязателен")
@@ -317,7 +324,8 @@ def _dispatch(session, method, user_id, name, body):
 
     if method == "GET":
         if name:
-            scene = _get_scene(session, user_id, name)
+            target_user = owner_user_id or user_id
+            scene = _get_scene(session, target_user, name)
             if scene is None:
                 raise KeyError("Сцена не найдена")
             return {"ok": True, **scene}
