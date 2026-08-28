@@ -123,7 +123,7 @@
         #pddBtn:active { transform:translateX(-50%) scale(0.92); }
         #pddBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
         /* Режим скрытия элементов управления (долгое нажатие на ПДД) */
-        body.controls-hidden .fab:not(#pddBtn),
+        body.controls-hidden .fab:not(#pddBtn):not(#saveBtn),
         body.controls-hidden #textBtn,
         body.controls-hidden #rotateBtn,
         body.controls-hidden #historyBtn,
@@ -135,9 +135,9 @@
         body.controls-hidden #tlPanel,
         body.controls-hidden #colorPanel,
         body.controls-hidden #widthSlider,
-        body.controls-hidden #recAllBtn,
-        body.controls-hidden #playAllBtn { display:none !important; }
-        body.controls-hidden #pddBtn { background:transparent; box-shadow:none; }
+        body.controls-hidden #recAllBtn { display:none !important; }
+        body.controls-hidden #pddBtn,
+        body.controls-hidden #saveBtn { background:rgba(15,15,15,0.25); border-color:rgba(255,255,255,0.12); box-shadow:none; }
         #pddModal {
             position:fixed; left:0; right:0; bottom:0; height:40vh; max-height:100vh; z-index:9100;
             background:rgba(15,15,15,0.97); color:#fff;
@@ -929,6 +929,12 @@ function restoreScene(snap) {
         map.addChild(m);
         textItems.push(m);
     });
+    // Если режим скрытия элементов управления активен на момент загрузки сцены,
+    // новые маркеры/текст ещё раз делаем неперетаскиваемыми.
+    if (document.body.classList.contains('controls-hidden')) {
+        placedMarkers.forEach(m => m.update({ draggable: false }));
+        textItems.forEach(t => t.update({ draggable: false }));
+    }
     updateSignalBtns();
 }
 
@@ -1182,6 +1188,7 @@ function setupTopDrag(marker) {
 
     el.addEventListener('pointerdown', e => {
         if (drawMode || eraserMode || marker._panelOpen) return;
+        if (document.body.classList.contains('controls-hidden')) return;
         if (skipped(e.target)) return;
         armed = true; active = false; pid = e.pointerId;
         lastX = e.clientX; lastY = e.clientY; hasPrev = false;
@@ -1989,8 +1996,13 @@ function initCustomPinchRotate() {
             pddLpTimer = null;
             pddLpFired = true;
             document.body.classList.toggle('controls-hidden');
+            const hidden = document.body.classList.contains('controls-hidden');
+            // В режиме скрытия элементов управления отключаем перетаскивание
+            // машинок, знаков, светофоров и текста; при выходе — возвращаем.
+            placedMarkers.forEach(m => m.update({ draggable: !hidden && !(m._panelOpen || drawMode || eraserMode) }));
+            textItems.forEach(t => t.update({ draggable: !hidden }));
             // при скрытии закрываем шторку и все панели
-            if (document.body.classList.contains('controls-hidden')) {
+            if (hidden) {
                 if (pddModal.classList.contains('visible')) togglePdd();
                 ['picPanel', 'znakPanel', 'tlPanel'].forEach(id => {
                     const el = document.getElementById(id);

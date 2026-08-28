@@ -863,10 +863,26 @@
     function updatePlayAllBtn() {
         if (!playAllBtn) return;
         const any = playables().length > 0;
-        playAllBtn.style.display = any ? 'flex' : 'none';
-        playAllBtn.classList.toggle('active', _playAll);
-        playAllBtn.innerHTML = _playAll ? ICON_STOP : ICON_PLAY;
+        const hidden = document.body.classList.contains('controls-hidden');
+        if (hidden && any && !_playAll) {
+            playAllBtn.style.display = 'flex';
+            playAllBtn.style.background = 'rgba(15,15,15,0.3)';
+            playAllBtn.style.boxShadow = 'none';
+            playAllBtn.classList.remove('active');
+            playAllBtn.innerHTML = ICON_PLAY;
+        } else {
+            playAllBtn.style.background = '';
+            playAllBtn.style.boxShadow = '';
+            playAllBtn.style.display = any ? 'flex' : 'none';
+            playAllBtn.classList.toggle('active', _playAll);
+            playAllBtn.innerHTML = _playAll ? ICON_STOP : ICON_PLAY;
+        }
     }
+
+    // При переключении режима скрытия элементов управления (controls-hidden)
+    // обновляем видимость/прозрачность кнопки PLAY.
+    new MutationObserver(() => updatePlayAllBtn())
+        .observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
     recAllBtn.addEventListener('click', toggleRec);
     playAllBtn.addEventListener('click', () => {
