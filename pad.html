@@ -2217,13 +2217,24 @@ function initCustomPinchRotate() {
         const ownerUserId = decoded.slice(0, idx);
         const sceneName = decoded.slice(idx + 1);
         if (!ownerUserId || !sceneName) return;
+        // При запуске по ссылке с параметром сразу включаем режим прозрачности
+        document.body.classList.add('controls-hidden');
         if (!window.loadSharedScene) return;
         // Ждём готовности карты
+        const doLoad = () => {
+            window.loadSharedScene(ownerUserId, sceneName).then(() => {
+                // Сцена применена — принудительно отключаем перетаскивание маркеров/текста
+                if (document.body.classList.contains('controls-hidden')) {
+                    placedMarkers.forEach(m => m.update({ draggable: false }));
+                    textItems.forEach(t => t.update({ draggable: false }));
+                }
+            });
+        };
         if (window.map) {
-            window.loadSharedScene(ownerUserId, sceneName);
+            doLoad();
         } else {
             const t = setInterval(() => {
-                if (window.map) { clearInterval(t); window.loadSharedScene(ownerUserId, sceneName); }
+                if (window.map) { clearInterval(t); doLoad(); }
             }, 500);
         }
     }
