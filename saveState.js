@@ -64,6 +64,7 @@
                 azimuth: (map && map.azimuth != null) ? map.azimuth : (typeof mapRot === 'number' ? mapRot : null)
             },
             lines: snap.lines || [],
+            texts: snap.texts || [],
             markers: snap.markers || []
         };
     }
@@ -168,7 +169,8 @@
             texts: (Array.isArray(data.texts) ? data.texts : []).map(t => ({
                 lat: t.lat,
                 lon: t.lon,
-                text: t.text || ''
+                text: t.text || '',
+                collapsed: !!t.collapsed
             })),
             markers: markers.map(m => ({
                 kind: m.kind || 'pic',

@@ -863,7 +863,7 @@ function serializeScene() {
     if (textEditing) commitTextEditing();
     return {
         lines: drawnLines.map(l => ({ coords: l.coords.map(c => c.slice()), color: l.color || '#000000', width: l.width || 5 })),
-        texts: textItems.map(m => ({ lat: m._lat, lon: m._lon, text: m._ta ? m._ta.textContent || '' : '' })),
+        texts: textItems.map(m => ({ lat: m._lat, lon: m._lon, text: m._ta ? m._ta.textContent || '' : '', collapsed: !!(m._select && m._select.classList.contains('collapsed')) })),
         markers: placedMarkers.map(m => ({
             kind: m._isTl ? 'tl' : (m._isZnak ? 'znak' : 'pic'),
             file: m._isTl ? m._tlType : m._file,
@@ -925,7 +925,7 @@ function restoreScene(snap) {
     if (activeCar && placedMarkers.indexOf(activeCar) === -1) activeCar = null;
     if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.add('car-active');
     (snap.texts || []).forEach(d => {
-        const m = buildTextItem(d.lat, d.lon, d.text);
+        const m = buildTextItem(d.lat, d.lon, d.text, !!d.collapsed);
         map.addChild(m);
         textItems.push(m);
     });

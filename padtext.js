@@ -15,6 +15,8 @@ let textEditing = null;
 
 // Размер текста фиксирован в пикселях экрана — не зависит от масштаба карты.
 const TEXT_FONT_SIZE_PX = 16;
+// Ширина свёрнутой иконки «T» в метрах — одинакова на карте при любом масштабе.
+const TEXT_BADGE_WIDTH_M = 5;
 
 function startTextMode() {
     textMode = true;
@@ -130,7 +132,7 @@ function startEditingText(marker) {
 }
 
 // Восстановление сохранённого текста (readonly)
-function buildTextItem(lat, lon, text) {
+function buildTextItem(lat, lon, text, collapsed) {
     const ta = document.createElement('div');
     ta.className = 'text-input';
     ta.setAttribute('contenteditable', 'false');
@@ -140,6 +142,7 @@ function buildTextItem(lat, lon, text) {
     ta.classList.add('fixed');
     positionTextMarker(marker);
     resizeTa(marker);
+    if (collapsed) marker._select.classList.add('collapsed');
     return marker;
 }
 
@@ -209,6 +212,24 @@ function positionTextMarker(marker) {
     const el = marker._select;
     if (!el) return;
     el.style.fontSize = TEXT_FONT_SIZE_PX + 'px';
+    // Свёрнутая иконка «T» — фиксированные 5 метров в ширину на карте.
+    resizeTextBadge(marker);
+}
+
+// Размер свёрнутой иконки «T» по метрам: квадрат 5 м x 5 м в любом масштабе.
+function resizeTextBadge(marker) {
+    const el = marker._select;
+    if (!el) return;
+    const badge = el.querySelector('.text-badge');
+    if (!badge) return;
+    if (typeof metersPerPixel !== 'function' || !marker._lat) return;
+    const mpp = metersPerPixel(marker._lat);
+    if (!mpp || !isFinite(mpp)) return;
+    const px = Math.max(10, TEXT_BADGE_WIDTH_M / mpp);
+    badge.style.width = px + 'px';
+    badge.style.height = px + 'px';
+    badge.style.borderRadius = (px * 0.2) + 'px';
+    badge.style.fontSize = (px * 0.55) + 'px';
 }
 
 function positionAllText() {
