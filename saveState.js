@@ -1,13 +1,24 @@
-// Сохранение и загрузка сцен через Яндекс.Облако функцию (YDB, таблица "scene").
+// Менеджер сцен через Яндекс.Облако функцию (YDB, таблица "scene").
 //
 // Модуль переиспользует serializeScene()/restoreScene() из pad.html, чтобы не
 // дублировать логику сериализации линий, объектов и записанных движений машинок.
+//
+// Кнопка сразу открывает менеджер со списком всех сцен пользователя. Из него:
+//   - Сохранить        — перезаписывает текущую активную сцену (если она загружена),
+//                         либо создаёт новую после ввода имени;
+//   - Сохранить как…   — всегда создаёт новую / перезаписывает после ввода имени;
+//   - Загрузить (иконка) — применяет выбранную сцену на карту и делает её активной;
+//   - Переименовать (иконка) — меняет имя сцены;
+//   - Удалить (иконка)       — удаляет сцену.
 
 (function () {
     if (window.sceneIoInit) return;
     window.sceneIoInit = true;
 
     const API_URL = 'https://functions.yandexcloud.net/d4eurq94s2t0svq2jpu4';
+
+    // Имя активной (загруженной на карту) сцены. null — активной сцены нет.
+    let activeSceneName = null;
 
     // Telegram-контекст: user_id и init_data (подписанные данные для проверки на сервере)
     function tgCreds() {
@@ -18,10 +29,6 @@
             init_data: wa ? (wa.initData || '') : ''
         };
     }
-
-    // Отдельные карточки машинок могут иметь записанные движения
-    // (recplay.js: _samples/_startTrim/_endTrim/_phaseOffset/_signals).
-    // serializeScene() уже кладёт их в поле "rec" каждого маркера.
 
     function collectState() {
         const snap = window.serializeScene ? window.serializeScene() : { lines: [], markers: [] };
@@ -54,7 +61,7 @@
 
     async function api(method, { body, query } = {}) {
         const creds = tgCreds();
-        // Для GET/DELETE передаём user_id и init_data в query-строке
+        // Для GET/DELETE/PUT передаём user_id и init_data в query-строке
         query = Object.assign({}, query || {});
         if (creds.user_id && query.user_id == null) query.user_id = creds.user_id;
         if (creds.init_data && query.initData == null) query.initData = creds.init_data;
@@ -79,47 +86,22 @@
         return json;
     }
 
-    // ---- Окно с вариантами ----
-    let modal = null;
-    function openModal() {
-        if (modal) { modal.classList.add('visible'); return; }
-
-        modal = document.createElement('div');
-        modal.className = 'scene-io-modal';
-        const box = document.createElement('div');
-        box.className = 'scene-io-box';
-
-        const title = document.createElement('div');
-        title.className = 'scene-io-title';
-        title.textContent = 'Сцена';
-
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'scene-io-opt';
-        saveBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить сцену</span>';
-        saveBtn.addEventListener('click', openSaveModal);
-
-        const loadBtn = document.createElement('button');
-        loadBtn.className = 'scene-io-opt';
-        loadBtn.innerHTML = '<span class="scene-io-opt-icon scene-io-load-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Загрузить сцену</span>';
-        loadBtn.addEventListener('click', openLoadList);
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'scene-io-cancel';
-        cancelBtn.textContent = 'Отмена';
-        cancelBtn.addEventListener('click', closeModal);
-
-        box.appendChild(title);
-        box.appendChild(saveBtn);
-        box.appendChild(loadBtn);
-        box.appendChild(cancelBtn);
-        modal.appendChild(box);
-        modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-        document.body.appendChild(modal);
-        modal.classList.add('visible');
+    // ---- Размер в килобайтах ----
+    function formatSize(bytes) {
+        if (!bytes || bytes <= 0) return '';
+        return (bytes / 1024).toFixed(1) + ' КБ';
     }
 
-    function closeModal() {
-        if (modal) modal.classList.remove('visible');
+    // ---- Открыть/закрыть менеджер ----
+    let managerEl = null;
+
+    function closeManager() {
+        if (managerEl) {
+            const el = managerEl;
+            managerEl = null;
+            el.classList.remove('visible');
+            setTimeout(() => el.remove(), 200);
+        }
     }
 
     function closeM(el) {
@@ -127,74 +109,8 @@
         setTimeout(() => el.remove(), 200);
     }
 
-    // ---- Сохранение ----
-    function openSaveModal() {
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.className = 'scene-io-input';
-        nameInput.value = defaultName();
-        nameInput.placeholder = 'Имя сцены';
-        nameInput.spellcheck = false;
-        nameInput.autocomplete = 'off';
-
-        const confirm = document.createElement('button');
-        confirm.className = 'scene-io-opt';
-        confirm.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить</span>';
-
-        const cancel = document.createElement('button');
-        cancel.className = 'scene-io-cancel';
-        cancel.textContent = 'Отмена';
-
-        const status = document.createElement('div');
-        status.className = 'scene-io-status';
-
-        const subModal = document.createElement('div');
-        subModal.className = 'scene-io-modal scene-io-modal-save';
-        const subBox = document.createElement('div');
-        subBox.className = 'scene-io-box';
-        const subTitle = document.createElement('div');
-        subTitle.className = 'scene-io-title';
-        subTitle.textContent = 'Сохранить сцену';
-        subBox.appendChild(subTitle);
-        subBox.appendChild(nameInput);
-        subBox.appendChild(confirm);
-        subBox.appendChild(status);
-        subBox.appendChild(cancel);
-        subModal.appendChild(subBox);
-        subModal.addEventListener('click', e => { if (e.target === subModal) closeM(subModal); });
-        document.body.appendChild(subModal);
-        requestAnimationFrame(() => {
-            subModal.classList.add('visible');
-            nameInput.focus();
-            nameInput.select();
-        });
-
-        confirm.addEventListener('click', async () => {
-            const base = sanitizeName(nameInput.value) || defaultName();
-            confirm.disabled = true;
-            status.textContent = 'Сохранение…';
-            status.classList.add('busy');
-            try {
-                await api('POST', { body: { name: base, data: collectState() } });
-                status.textContent = 'Сохранено ✓';
-                status.classList.remove('busy');
-                status.classList.add('ok');
-                closeModal();
-                setTimeout(() => closeM(subModal), 500);
-            } catch (e) {
-                status.textContent = 'Ошибка: ' + e.message;
-                status.classList.remove('busy');
-                confirm.disabled = false;
-            }
-        });
-        cancel.addEventListener('click', () => closeM(subModal));
-        nameInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { e.preventDefault(); confirm.click(); }
-        });
-    }
-
-    // ---- Загрузка ----
-    function applyScene(data) {
+    // ---- Применение сцены на карту ----
+    function applyScene(data, name) {
         const lines = Array.isArray(data.lines) ? data.lines : [];
         const markers = Array.isArray(data.markers) ? data.markers : [];
 
@@ -223,7 +139,6 @@
         if (map && data.camera) {
             try {
                 if (Array.isArray(data.camera.center) && data.camera.center.length >= 2 && data.camera.zoom != null) {
-                    // Центр/масштаб задаются через location, поворот — через camera
                     const loc = {
                         center: [data.camera.center[0], data.camera.center[1]],
                         zoom: data.camera.zoom
@@ -238,16 +153,244 @@
                 }
             } catch (e) {}
         }
+
+        activeSceneName = name || null;
     }
 
-    function openLoadList() {
-        const listModal = document.createElement('div');
-        listModal.className = 'scene-io-modal scene-io-modal-save';
-        const listBox = document.createElement('div');
-        listBox.className = 'scene-io-box';
-        const listTitle = document.createElement('div');
-        listTitle.className = 'scene-io-title';
-        listTitle.textContent = 'Загрузить сцену';
+    // ---- Сохранение (интерактив: ввод имени) ----
+    function saveWithName({ prefill, callback }) {
+        const wrap = document.createElement('div');
+        wrap.className = 'scene-io-modal scene-io-modal-save';
+        const box = document.createElement('div');
+        box.className = 'scene-io-box';
+
+        const title = document.createElement('div');
+        title.className = 'scene-io-title';
+        title.textContent = 'Сохранить сцену';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'scene-io-input';
+        nameInput.value = prefill || '';
+        nameInput.placeholder = 'Имя сцены';
+        nameInput.spellcheck = false;
+        nameInput.autocomplete = 'off';
+
+        const confirm = document.createElement('button');
+        confirm.className = 'scene-io-opt';
+        confirm.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить</span>';
+
+        const cancel = document.createElement('button');
+        cancel.className = 'scene-io-cancel';
+        cancel.textContent = 'Отмена';
+
+        const status = document.createElement('div');
+        status.className = 'scene-io-status';
+
+        box.appendChild(title);
+        box.appendChild(nameInput);
+        box.appendChild(confirm);
+        box.appendChild(status);
+        box.appendChild(cancel);
+        wrap.appendChild(box);
+        wrap.addEventListener('click', e => { if (e.target === wrap) { closeM(wrap); } });
+        document.body.appendChild(wrap);
+        requestAnimationFrame(() => {
+            wrap.classList.add('visible');
+            nameInput.focus();
+            if (nameInput.value) nameInput.select();
+        });
+
+        confirm.addEventListener('click', async () => {
+            const name = sanitizeName(nameInput.value);
+            if (!name) { status.textContent = 'Введите имя сцены'; return; }
+            confirm.disabled = true;
+            status.textContent = 'Сохранение…';
+            status.classList.add('busy');
+            try {
+                await api('POST', { body: { name: name, data: collectState() } });
+                status.textContent = 'Сохранено ✓';
+                status.classList.remove('busy');
+                status.classList.add('ok');
+                closeM(wrap);
+                if (callback) callback(name);
+            } catch (e) {
+                status.textContent = 'Ошибка: ' + e.message;
+                status.classList.remove('busy');
+                confirm.disabled = false;
+            }
+        });
+        cancel.addEventListener('click', () => closeM(wrap));
+        nameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); confirm.click(); }
+        });
+    }
+
+    // Сохранить в активную сцену (перезапись) или создать новую
+    function saveActive() {
+        const prefill = activeSceneName || defaultName();
+        saveWithName({
+            prefill: prefill,
+            callback: (name) => {
+                activeSceneName = name;
+                if (managerEl) {
+                    const rows = managerEl.querySelectorAll('.scene-io-item');
+                    rows.forEach(r => r.classList.toggle('active', r.querySelector('.scene-io-item-name').textContent === name));
+                    refreshManager();
+                }
+            }
+        });
+    }
+
+    function saveAs() {
+        saveWithName({
+            prefill: defaultName(),
+            callback: (name) => {
+                activeSceneName = name;
+                if (managerEl) {
+                    const rows = managerEl.querySelectorAll('.scene-io-item');
+                    rows.forEach(r => r.classList.toggle('active', r.querySelector('.scene-io-item-name').textContent === name));
+                    refreshManager();
+                }
+            }
+        });
+    }
+
+    // ---- Простой prompt-модалка (для переименования) ----
+    function promptBox({ title, label, value, placeholder, okText, onSubmit }) {
+        const wrap = document.createElement('div');
+        wrap.className = 'scene-io-modal scene-io-modal-save';
+        const box = document.createElement('div');
+        box.className = 'scene-io-box';
+
+        const t = document.createElement('div');
+        t.className = 'scene-io-title';
+        t.textContent = title;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'scene-io-input';
+        input.value = value || '';
+        input.placeholder = placeholder || label || '';
+        input.spellcheck = false;
+        input.autocomplete = 'off';
+
+        const ok = document.createElement('button');
+        ok.className = 'scene-io-opt';
+        ok.textContent = okText || 'ОК';
+
+        const cancel = document.createElement('button');
+        cancel.className = 'scene-io-cancel';
+        cancel.textContent = 'Отмена';
+
+        const status = document.createElement('div');
+        status.className = 'scene-io-status';
+
+        box.appendChild(t);
+        box.appendChild(input);
+        box.appendChild(ok);
+        box.appendChild(status);
+        box.appendChild(cancel);
+        wrap.appendChild(box);
+        wrap.addEventListener('click', e => { if (e.target === wrap) closeM(wrap); });
+        document.body.appendChild(wrap);
+        requestAnimationFrame(() => {
+            wrap.classList.add('visible');
+            input.focus();
+            input.select();
+        });
+
+        const submit = () => {
+            const val = sanitizeName(input.value);
+            if (!val) { status.textContent = 'Введите имя'; return; }
+            ok.disabled = true;
+            onSubmit(val, wrap).catch(e => {
+                status.textContent = 'Ошибка: ' + e.message;
+                ok.disabled = false;
+            });
+        };
+
+        ok.addEventListener('click', submit);
+        cancel.addEventListener('click', () => closeM(wrap));
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        });
+    }
+
+    // ---- Конфирм (для удаления) ----
+    function confirmBox({ title, message, okText, onOk }) {
+        const wrap = document.createElement('div');
+        wrap.className = 'scene-io-modal scene-io-modal-save';
+        const box = document.createElement('div');
+        box.className = 'scene-io-box';
+
+        const t = document.createElement('div');
+        t.className = 'scene-io-title';
+        t.textContent = title;
+
+        const msg = document.createElement('div');
+        msg.className = 'scene-io-confirm-msg';
+        msg.textContent = message;
+
+        const ok = document.createElement('button');
+        ok.className = 'scene-io-opt scene-io-danger';
+        ok.textContent = okText || 'Удалить';
+
+        const cancel = document.createElement('button');
+        cancel.className = 'scene-io-cancel';
+        cancel.textContent = 'Отмена';
+
+        box.appendChild(t);
+        box.appendChild(msg);
+        box.appendChild(ok);
+        box.appendChild(cancel);
+        wrap.appendChild(box);
+        wrap.addEventListener('click', e => { if (e.target === wrap) closeM(wrap); });
+        document.body.appendChild(wrap);
+        requestAnimationFrame(() => wrap.classList.add('visible'));
+
+        ok.addEventListener('click', async () => {
+            ok.disabled = true;
+            try {
+                await onOk();
+                closeM(wrap);
+            } catch (e) {
+                ok.disabled = false;
+                msg.textContent = 'Ошибка: ' + e.message;
+            }
+        });
+        cancel.addEventListener('click', () => closeM(wrap));
+    }
+
+    // ---- Менеджер сцен ----
+    function openManager() {
+        if (managerEl) { managerEl.classList.add('visible'); return; }
+
+        const modal = document.createElement('div');
+        modal.className = 'scene-io-modal';
+        const box = document.createElement('div');
+        box.className = 'scene-io-box';
+
+        const title = document.createElement('div');
+        title.className = 'scene-io-title';
+        title.textContent = 'Сцены';
+
+        // Верхние кнопки действий
+        const actions = document.createElement('div');
+        actions.className = 'scene-io-actions';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'scene-io-opt';
+        saveBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить</span>';
+        saveBtn.addEventListener('click', saveActive);
+
+        const saveAsBtn = document.createElement('button');
+        saveAsBtn.className = 'scene-io-opt';
+        saveAsBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M20 11H4v2h16v-2z"/></svg></span><span>Сохранить как…</span>';
+        saveAsBtn.addEventListener('click', saveAs);
+
+        actions.appendChild(saveBtn);
+        actions.appendChild(saveAsBtn);
 
         const listBody = document.createElement('div');
         listBody.className = 'scene-io-list';
@@ -258,61 +401,203 @@
 
         const cancelBtn = document.createElement('button');
         cancelBtn.className = 'scene-io-cancel';
-        cancelBtn.textContent = 'Отмена';
-        cancelBtn.addEventListener('click', () => closeM(listModal));
+        cancelBtn.textContent = 'Закрыть';
+        cancelBtn.addEventListener('click', closeManager);
 
-        listBox.appendChild(listTitle);
-        listBox.appendChild(listBody);
-        listBox.appendChild(status);
-        listBox.appendChild(cancelBtn);
-        listModal.appendChild(listBox);
-        listModal.addEventListener('click', e => { if (e.target === listModal) closeM(listModal); });
-        document.body.appendChild(listModal);
-        requestAnimationFrame(() => listModal.classList.add('visible'));
+        box.appendChild(title);
+        box.appendChild(actions);
+        box.appendChild(listBody);
+        box.appendChild(status);
+        box.appendChild(cancelBtn);
+        modal.appendChild(box);
+        modal.addEventListener('click', e => { if (e.target === modal) closeManager(); });
+        document.body.appendChild(modal);
+        requestAnimationFrame(() => modal.classList.add('visible'));
+        managerEl = modal;
 
         (async () => {
             try {
                 const json = await api('GET', {});
-                const scenes = (json.scenes || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                const scenes = (json.scenes || [])
+                    .slice()
+                    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
                 status.classList.remove('busy');
-                status.textContent = scenes.length ? '' : 'Сохранённых сцен нет';
+                status.textContent = scenes.length ? '' : 'Нет ни одной сцены';
                 scenes.forEach(s => {
-                    const row = document.createElement('button');
-                    row.className = 'scene-io-item';
-                    const nm = document.createElement('div');
-                    nm.className = 'scene-io-item-name';
-                    nm.textContent = s.name;
-                    row.appendChild(nm);
-                    if (s.savedAt) {
-                        const dt = document.createElement('div');
-                        dt.className = 'scene-io-item-date';
-                        dt.textContent = new Date(s.savedAt).toLocaleString();
-                        row.appendChild(dt);
-                    }
-                    row.addEventListener('click', async () => {
-                        status.textContent = 'Загрузка…';
-                        status.classList.add('busy');
-                        try {
-                            const got = await api('GET', { query: { name: s.name } });
-                            let data = got.data;
-                            if (typeof data === 'string') data = JSON.parse(data);
-                            status.classList.remove('busy');
-                            status.textContent = '';
-                            applyScene(data || got);
-                            closeModal();
-                            closeM(listModal);
-                        } catch (e) {
-                            status.classList.remove('busy');
-                            status.textContent = 'Ошибка: ' + e.message;
-                        }
-                    });
-                    listBody.appendChild(row);
+                    listBody.appendChild(buildSceneRow(s, status, listBody));
                 });
             } catch (e) {
                 status.classList.remove('busy');
                 status.textContent = 'Ошибка: ' + e.message;
             }
         })();
+
+        function buildSceneRow(scene, statusEl, listEl) {
+            const row = document.createElement('div');
+            row.className = 'scene-io-item' + (activeSceneName === scene.name ? ' active' : '');
+
+            const main = document.createElement('div');
+            main.className = 'scene-io-item-main';
+
+            const left = document.createElement('div');
+            left.className = 'scene-io-item-left';
+            const nm = document.createElement('div');
+            nm.className = 'scene-io-item-name';
+            nm.textContent = scene.name;
+            left.appendChild(nm);
+            const meta = document.createElement('div');
+            meta.className = 'scene-io-item-meta';
+            const parts = [];
+            if (scene.sizeBytes) parts.push(formatSize(scene.sizeBytes));
+            if (scene.savedAt) parts.push(new Date(scene.savedAt).toLocaleString());
+            meta.textContent = parts.join(' · ');
+            left.appendChild(meta);
+            main.appendChild(left);
+
+            const btns = document.createElement('div');
+            btns.className = 'scene-io-item-btns';
+
+            const mkBtn = (title, svg, onClick) => {
+                const b = document.createElement('button');
+                b.className = 'scene-io-item-btn';
+                b.title = title;
+                b.setAttribute('aria-label', title);
+                b.innerHTML = svg;
+                b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+                return b;
+            };
+
+            const loadBtn = mkBtn('Загрузить',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#30D158"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg>',
+                () => loadScene(scene, statusEl));
+            const renameBtn = mkBtn('Переименовать',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
+                () => renameScene(scene, statusEl));
+            const delBtn = mkBtn('Удалить',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
+                () => deleteScene(scene, statusEl));
+
+            btns.appendChild(loadBtn);
+            btns.appendChild(renameBtn);
+            btns.appendChild(delBtn);
+            main.appendChild(btns);
+            row.appendChild(main);
+            return row;
+        }
+    }
+
+    async function loadScene(scene, statusEl) {
+        try {
+            const got = await api('GET', { query: { name: scene.name } });
+            let data = got.data;
+            if (typeof data === 'string') data = JSON.parse(data);
+            applyScene(data || got, scene.name);
+            if (managerEl) {
+                const rows = managerEl.querySelectorAll('.scene-io-item');
+                rows.forEach(r => r.classList.toggle('active', r.querySelector('.scene-io-item-name').textContent === scene.name));
+            }
+            statusEl.classList.remove('busy');
+            statusEl.textContent = 'Загружено: ' + scene.name;
+        } catch (e) {
+            statusEl.classList.remove('busy');
+            statusEl.textContent = 'Ошибка: ' + e.message;
+        }
+    }
+
+    async function renameScene(scene, statusEl) {
+        promptBox({
+            title: 'Переименовать сцену',
+            label: 'Новое имя',
+            value: scene.name,
+            placeholder: 'Новое имя сцены',
+            okText: 'Переименовать',
+            onSubmit: async (newName, wrap) => {
+                await api('PUT', { body: { name: newName, from: scene.name } });
+                if (activeSceneName === scene.name) activeSceneName = newName;
+                closeM(wrap);
+                refreshManager();
+            }
+        });
+    }
+
+    async function deleteScene(scene, statusEl) {
+        confirmBox({
+            title: 'Удалить сцену',
+            message: 'Удалить сцену «' + scene.name + '» без возможности восстановления?',
+            okText: 'Удалить',
+            onOk: async () => {
+                await api('DELETE', { query: { name: scene.name } });
+                if (activeSceneName === scene.name) activeSceneName = null;
+                refreshManager();
+            }
+        });
+    }
+
+    // Обновить список в менеджере без пересоздания окна
+    async function refreshManager() {
+        if (!managerEl) return;
+        const listBody = managerEl.querySelector('.scene-io-list');
+        const status = managerEl.querySelector('.scene-io-status');
+        listBody.innerHTML = '';
+        status.classList.add('busy');
+        status.textContent = 'Обновление…';
+        try {
+            const json = await api('GET', {});
+            const scenes = (json.scenes || [])
+                .slice()
+                .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+            status.classList.remove('busy');
+            status.textContent = scenes.length ? '' : 'Нет ни одной сцены';
+            scenes.forEach(s => listBody.appendChild(buildRow(s)));
+        } catch (e) {
+            status.classList.remove('busy');
+            status.textContent = 'Ошибка: ' + e.message;
+        }
+
+        // Перемещаем buildRow сюда, чтобы использовать в refreshManager
+        function buildRow(scene) {
+            const row = document.createElement('div');
+            row.className = 'scene-io-item' + (activeSceneName === scene.name ? ' active' : '');
+            const main = document.createElement('div');
+            main.className = 'scene-io-item-main';
+            const left = document.createElement('div');
+            left.className = 'scene-io-item-left';
+            const nm = document.createElement('div');
+            nm.className = 'scene-io-item-name';
+            nm.textContent = scene.name;
+            left.appendChild(nm);
+            const meta = document.createElement('div');
+            meta.className = 'scene-io-item-meta';
+            const parts = [];
+            if (scene.sizeBytes) parts.push(formatSize(scene.sizeBytes));
+            if (scene.savedAt) parts.push(new Date(scene.savedAt).toLocaleString());
+            meta.textContent = parts.join(' · ');
+            left.appendChild(meta);
+            main.appendChild(left);
+            const btns = document.createElement('div');
+            btns.className = 'scene-io-item-btns';
+            const mkBtn = (title, svg, onClick) => {
+                const b = document.createElement('button');
+                b.className = 'scene-io-item-btn';
+                b.title = title;
+                b.setAttribute('aria-label', title);
+                b.innerHTML = svg;
+                b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+                return b;
+            };
+            btns.appendChild(mkBtn('Загрузить',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#30D158"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg>',
+                () => loadScene(scene, status)));
+            btns.appendChild(mkBtn('Переименовать',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
+                () => renameScene(scene, status)));
+            btns.appendChild(mkBtn('Удалить',
+                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
+                () => deleteScene(scene, status)));
+            main.appendChild(btns);
+            row.appendChild(main);
+            return row;
+        }
     }
 
     // ---- Кнопка ----
@@ -320,37 +605,47 @@
         const btn = document.createElement('button');
         btn.id = 'saveBtn';
         btn.className = 'fab';
-        btn.title = 'Сцена: сохранить / загрузить';
-        btn.setAttribute('aria-label', 'Сцена: сохранить / загрузить');
+        btn.title = 'Сцены';
+        btn.setAttribute('aria-label', 'Сцены');
         btn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v5h12V4H6zm3 0v3h6V4H9zM6 13v5h12v-5H6z"/></svg>';
-        btn.addEventListener('click', openModal);
+        btn.addEventListener('click', openManager);
         document.body.appendChild(btn);
 
         const css = document.createElement('style');
         css.textContent = '#saveBtn { bottom:calc(76px + env(safe-area-inset-bottom)); right:12px; }'
             + '.scene-io-modal{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s;}'
             + '.scene-io-modal.visible{opacity:1;visibility:visible;}'
-            + '.scene-io-box{width:100%;max-width:340px;background:rgba(24,24,24,0.98);border-radius:16px;border:0.5px solid rgba(255,255,255,0.12);padding:16px;display:flex;flex-direction:column;gap:8px;transform:scale(0.95);transition:transform .2s ease;max-height:80vh;}'
+            + '.scene-io-box{width:100%;max-width:380px;background:rgba(24,24,24,0.98);border-radius:16px;border:0.5px solid rgba(255,255,255,0.12);padding:16px;display:flex;flex-direction:column;gap:8px;transform:scale(0.95);transition:transform .2s ease;max-height:85vh;}'
             + '.scene-io-modal.visible .scene-io-box{transform:scale(1);}'
-            + '.scene-io-title{font-size:15px;font-weight:700;color:#fff;text-align:center;padding:6px 0 12px;}'
-            + '.scene-io-opt{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;touch-action:manipulation;}'
+            + '.scene-io-title{font-size:15px;font-weight:700;color:#fff;text-align:center;padding:6px 0 8px;}'
+            + '.scene-io-opt{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px 14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;touch-action:manipulation;}'
             + '.scene-io-opt:active{background:rgba(255,255,255,0.14);}'
             + '.scene-io-opt:disabled{opacity:0.6;}'
-            + '.scene-io-opt-icon{width:30px;height:30px;flex-shrink:0;}'
-            + '.scene-io-opt-icon.scene-io-load-ico svg{transform:rotate(180deg);}'
-            + '.scene-io-cancel{padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;touch-action:manipulation;width:100%;}'
+            + '.scene-io-opt-icon{width:26px;height:26px;flex-shrink:0;}'
+            + '.scene-io-cancel{padding:12px 14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;touch-action:manipulation;width:100%;}'
             + '.scene-io-cancel:active{background:rgba(255,255,255,0.14);}'
             + '.scene-io-input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;outline:none;margin-bottom:8px;user-select:text;-webkit-user-select:text;}'
             + '.scene-io-input:focus{border-color:#30D158;}'
             + '.scene-io-status{min-height:18px;font-size:13px;color:#8E8E93;text-align:center;padding:2px 0;}'
             + '.scene-io-status.busy{color:#FFD60A;}'
             + '.scene-io-status.ok{color:#30D158;}'
+            + '.scene-io-actions{display:flex;gap:8px;}'
+            + '.scene-io-actions .scene-io-opt{flex:1;}'
             + '.scene-io-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:50vh;}'
-            + '.scene-io-item{display:flex;flex-direction:column;gap:2px;text-align:left;width:100%;padding:12px 14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;cursor:pointer;touch-action:manipulation;}'
-            + '.scene-io-item:active{background:rgba(255,255,255,0.14);}'
+            + '.scene-io-item{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;}'
+            + '.scene-io-item.active{background:rgba(48,209,88,0.15);border:0.5px solid rgba(48,209,88,0.6);}'
+            + '.scene-io-item-main{display:flex;align-items:center;justify-content:space-between;gap:8px;}'
+            + '.scene-io-item-left{flex:1;min-width:0;}'
             + '.scene-io-item-name{font-size:14px;font-weight:600;word-break:break-all;}'
-            + '.scene-io-item-date{font-size:12px;color:#8E8E93;}'
-            + '.scene-io-modal-save{z-index:9600;}';
+            + '.scene-io-item-meta{font-size:11px;color:#8E8E93;margin-top:2px;}'
+            + '.scene-io-item.active .scene-io-item-meta{color:rgba(48,209,88,0.8);}'
+            + '.scene-io-item-btns{display:flex;gap:4px;flex-shrink:0;}'
+            + '.scene-io-item-btn{width:34px;height:34px;border:none;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;padding:0;}'
+            + '.scene-io-item-btn:active{background:rgba(255,255,255,0.16);}'
+            + '.scene-io-modal-save{z-index:9600;}'
+            + '.scene-io-confirm-msg{font-size:14px;color:#fff;text-align:center;padding:4px 8px 12px;line-height:1.4;}'
+            + '.scene-io-opt.scene-io-danger{background:rgba(255,69,58,0.2);color:#FF453A;}'
+            + '.scene-io-opt.scene-io-danger:active{background:rgba(255,69,58,0.3);}';
         document.head.appendChild(css);
     }
 

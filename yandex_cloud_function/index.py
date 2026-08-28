@@ -146,11 +146,16 @@ def _list_scenes(session: ydb.Session, user_id: str):
     out = []
     for row in result_sets[0].rows:
         name = _ascii(row["name"])
+        data = _ascii(row["data"])
         try:
-            saved_at = json.loads(_ascii(row["data"])).get("savedAt")
+            saved_at = json.loads(data).get("savedAt")
         except Exception:
             saved_at = None
-        out.append({"name": name, "savedAt": saved_at})
+        out.append({
+            "name": name,
+            "savedAt": saved_at,
+            "sizeBytes": len(data.encode("utf-8")),
+        })
     out.sort(key=lambda s: s["name"])
     return out
 
@@ -167,6 +172,18 @@ def _delete_scene(session: ydb.Session, user_id: str, name: str) -> bool:
         commit_tx=True,
     )
     return True
+
+
+def _rename_scene(session: ydb.Session, user_id: str, old_name: str, new_name: str) -> str:
+    """Переименовывает сцену: копирует данные под новым ключом и удаляет старый."""
+    if new_name == old_name:
+        return new_name
+    scene = _get_scene(session, user_id, old_name)
+    if scene is None:
+        raise KeyError("Сцена не найдена")
+    _upsert_scene(session, user_id, new_name, scene["data"])
+    _delete_scene(session, user_id, old_name)
+    return new_name
 
 
 # ---------- Проверка Telegram initData ----------
@@ -239,7 +256,7 @@ def handler(event, context):
             "statusCode": 200,
             "headers": {
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type",
                 "Access-Control-Max-Age": "3600",
             },
@@ -306,6 +323,17 @@ def _dispatch(session, method, user_id, name, body):
             return {"ok": True, **scene}
         return {"ok": True, "scenes": _list_scenes(session, user_id)}
 
+    if method == "PUT":
+        if not name:
+            raise ValueError("Параметр 'name' обязателен")
+        old_name = None
+        if isinstance(body, dict):
+            old_name = body.get("from")
+        if not old_name:
+            raise ValueError("Параметр 'from' обязателен")
+        renamed = _rename_scene(session, user_id, old_name, name)
+        return {"ok": True, "name": renamed}
+
     if method == "DELETE":
         if not name:
             raise ValueError("Параметр 'name' обязателен")
@@ -321,7 +349,7 @@ def _ok(data):
         "headers": {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
         },
         "body": json.dumps(data, ensure_ascii=False),
