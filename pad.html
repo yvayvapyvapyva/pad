@@ -318,6 +318,7 @@
             -webkit-user-select:text; user-select:text; -webkit-touch-callout:none;
             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
             font-weight:600; color:#000; line-height:1.2; text-align:center;
+            touch-action:none;
         }
         .text-input {
             display:block; box-sizing:border-box; width:max-content; min-width:60px; max-width:calc(100vw - 24px);
@@ -331,6 +332,18 @@
         .text-item.fixed .text-input { border:none; background:transparent; color:#000; text-shadow:0 1px 2px rgba(255,255,255,0.8), 0 0 3px rgba(255,255,255,0.9); width:max-content; }
         .text-item.fixed .text-input.empty::before { content:''; }
         .text-item .text-input:focus { border-color:rgba(0,0,0,0.35); }
+        /* Свернутое состояние: квадратная иконка с буквой «T» */
+        .text-badge {
+            display:none; width:30px; height:30px; border-radius:6px;
+            align-items:center; justify-content:center;
+            background:#fff; color:#000; border:1px solid rgba(0,0,0,0.4);
+            box-shadow:0 1px 3px rgba(0,0,0,0.25);
+            font-size:18px; font-weight:700; line-height:1; cursor:grab;
+            margin:0 auto; user-select:none; -webkit-user-select:none;
+            -webkit-touch-callout:none;
+        }
+        .text-item.collapsed .text-input { display:none; }
+        .text-item.collapsed .text-badge { display:flex; }
 
         .sign-leg {
             position:absolute; left:50%; transform:translateX(-50%);
@@ -787,7 +800,11 @@ function stopTextMode() {
 function makeTextMarker(lat, lon, ta) {
     const el = document.createElement('div');
     el.className = 'text-item';
+    const badge = document.createElement('span');
+    badge.className = 'text-badge';
+    badge.textContent = 'T';
     el.appendChild(ta);
+    el.appendChild(badge);
     const marker = new ymaps3.YMapMarker({
         coordinates: [lon, lat],
         onDragMove: (coords) => {
@@ -803,25 +820,44 @@ function makeTextMarker(lat, lon, ta) {
     return marker;
 }
 
-// Долгое нажатие на уже установленный (fixed) текст — переход в режим редактирования
+// Долгое нажатие на уже установленный (fixed) текст — переход в режим редактирования;
+// короткое нажатие — сворачивание/разворачивание в иконку «T»
 function setupTextLongPress(marker) {
     const el = marker._select;
-    let timer = null, longFired = false, sx = 0, sy = 0;
+    let timer = null, longFired = false, moved = false, sx = 0, sy = 0;
     el.addEventListener('pointerdown', (e) => {
         if (marker._fixed && !textEditing) {
             sx = e.clientX; sy = e.clientY;
-            longFired = false;
-            timer = setTimeout(() => { longFired = true; startEditingText(marker); }, 1000);
+            moved = false; longFired = false;
+            timer = setTimeout(() => { longFired = true; clearTimeout(timer); timer = null; startEditingText(marker); }, 1000);
         }
     });
     el.addEventListener('pointermove', (e) => {
-        if (!timer) return;
-        if (Math.hypot(e.clientX - sx, e.clientY - sy) > 8) clearLongPress();
+        if (!timer && !moved) return;
+        if (Math.hypot(e.clientX - sx, e.clientY - sy) > 8) {
+            moved = true; clearLongPress();
+        }
     });
-    el.addEventListener('pointerup', clearLongPress);
+    el.addEventListener('pointerup', (e) => {
+        const wasTimer = timer !== null;
+        clearLongPress();
+        if (!moved && !longFired && wasTimer && marker._fixed && !textEditing) {
+            toggleTextCollapse(marker);
+        }
+    });
     el.addEventListener('pointercancel', clearLongPress);
     function clearLongPress() {
         if (timer) { clearTimeout(timer); timer = null; }
+    }
+}
+
+// Сворачивание/разворачивание установленного текста в квадратную иконку «T»
+function toggleTextCollapse(marker) {
+    const el = marker._select;
+    if (!el) return;
+    el.classList.toggle('collapsed');
+    if (!el.classList.contains('collapsed') && marker._ta) {
+        scheduleTextResize(marker);
     }
 }
 
@@ -836,6 +872,7 @@ function startEditingText(marker) {
     marker._fixed = false;
     marker.update({ draggable: false });
     marker._select.classList.remove('fixed');
+    marker._select.classList.remove('collapsed');
     ta.classList.remove('empty');
     ta.setAttribute('contenteditable', 'true');
     textEditing = { marker, ta };
@@ -897,9 +934,9 @@ function placeTextField(lat, lon) {
 
     // Касание/клик по полю — продолжить редактирование; не даём маркеру начать драг
     marker._select.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
         if (e.target === ta || ta.contains(e.target)) {
             // сам текст — даём браузеру открыть клавиатуру и фокус
+            e.stopPropagation();
             return;
         }
         if (drawMode || eraserMode || textMode) e.preventDefault();
@@ -964,6 +1001,7 @@ function commitTextEditing() {
         return;
     }
     marker._fixed = true;
+    marker.update({ draggable: true });
     ta.setAttribute('contenteditable', 'false');
     ta.classList.remove('empty');
     ta.classList.add('fixed');
