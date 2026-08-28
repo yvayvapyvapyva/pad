@@ -202,9 +202,9 @@
             background:rgba(255,255,255,0.45); border-radius:7px; cursor:pointer; touch-action:none;
         }
         .pdd-open #addPicBtn, .pdd-open #picPanel, .pdd-open #addZnakBtn, .pdd-open #znakPanel,
-        .pdd-open #addTlBtn, .pdd-open #tlPanel, .pdd-open #historyBtn { z-index:9200; }
+        .pdd-open #addTlBtn, .pdd-open #tlPanel, .pdd-open #historyBtn, .pdd-open #saveBtn { z-index:9200; }
         body.pdd-drag #addPicBtn, body.pdd-drag #picPanel, body.pdd-drag #addZnakBtn, body.pdd-drag #znakPanel,
-        body.pdd-drag #addTlBtn, body.pdd-drag #tlPanel, body.pdd-drag #historyBtn { transition:none; }
+        body.pdd-drag #addTlBtn, body.pdd-drag #tlPanel, body.pdd-drag #historyBtn, body.pdd-drag #saveBtn { transition:none; }
         #colorPanel {
             position:fixed; top:calc(76px + env(safe-area-inset-top)); left:12px;
             z-index:9005; display:none; flex-direction:row; gap:10px;
@@ -1919,6 +1919,7 @@ function initCustomPinchRotate() {
         const tlBtn = document.getElementById('addTlBtn');
         const tlPanelEl = document.getElementById('tlPanel');
         const historyBtn = document.getElementById('historyBtn');
+        const saveBtn = document.getElementById('saveBtn');
         if (document.body.classList.contains('pdd-open')) {
             const h = pddModal.offsetHeight + 12;
             galleryBtn.style.bottom = h + 'px';
@@ -1928,6 +1929,7 @@ function initCustomPinchRotate() {
             if (tlBtn) tlBtn.style.bottom = (h + 128) + 'px';
             if (tlPanelEl) tlPanelEl.style.bottom = h + 'px';
             if (historyBtn) historyBtn.style.bottom = h + 'px';
+            if (saveBtn) saveBtn.style.bottom = (h + 64) + 'px';
         } else {
             galleryBtn.style.bottom = '';
             galleryPanel.style.bottom = '';
@@ -1936,6 +1938,7 @@ function initCustomPinchRotate() {
             if (tlBtn) tlBtn.style.bottom = '';
             if (tlPanelEl) tlPanelEl.style.bottom = '';
             if (historyBtn) historyBtn.style.bottom = '';
+            if (saveBtn) saveBtn.style.bottom = '';
         }
     }
     pddHeader.addEventListener('pointermove', (e) => {
@@ -2029,5 +2032,6 @@ function initCustomPinchRotate() {
 </script>
 <script src="recplay.js"></script>
 <script src="trafficlights.js"></script>
+<script src="saveState.js"></script>
 </body>
 </html>
