@@ -111,6 +111,8 @@
             const el = managerEl;
             managerEl = null;
             el.classList.remove('visible');
+            const btn = document.getElementById('saveBtn');
+            if (btn) btn.classList.remove('active');
             setTimeout(() => el.remove(), 200);
         }
     }
@@ -497,6 +499,8 @@
         requestAnimationFrame(() => modal.classList.add('visible'));
         managerEl = modal;
         attachSheetDrag(modal);
+        const btn = document.getElementById('saveBtn');
+        if (btn) btn.classList.add('active');
 
         (async () => {
             try {
@@ -692,12 +696,16 @@
         btn.className = 'fab';
         btn.title = 'Сцены';
         btn.setAttribute('aria-label', 'Сцены');
-        btn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v5h12V4H6zm3 0v3h6V4H9zM6 13v5h12v-5H6z"/></svg>';
-        btn.addEventListener('click', openManager);
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M5,3A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5.5L18.5,3H17V9A1,1 0 0,1 16,10H8A1,1 0 0,1 7,9V3H5M12,4V9H15V4H12M7,12H17A1,1 0 0,1 18,13V19H6V13A1,1 0 0,1 7,12Z"/></svg>';
+        btn.addEventListener('click', () => {
+            if (managerEl && managerEl.classList.contains('visible')) closeManager();
+            else openManager();
+        });
         document.body.appendChild(btn);
 
         const css = document.createElement('style');
-        css.textContent = '#saveBtn { bottom:calc(76px + env(safe-area-inset-bottom)); right:12px; }'
+        css.textContent = '#saveBtn { top:calc(12px + env(safe-area-inset-top) + var(--tg-top, 0px)); right:calc(50% - 100px); }'
+            + '#saveBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }'
             + '@keyframes sceneIoSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}'
             + '.scene-io-modal{position:fixed;inset:0;z-index:9500;background:transparent;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;padding:0;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s;-webkit-tap-highlight-color:transparent;}'
             + '.scene-io-modal.visible{opacity:1;visibility:visible;}'

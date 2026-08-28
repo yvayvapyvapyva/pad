@@ -1944,7 +1944,6 @@ function initCustomPinchRotate() {
         const tlBtn = document.getElementById('addTlBtn');
         const tlPanelEl = document.getElementById('tlPanel');
         const historyBtn = document.getElementById('historyBtn');
-        const saveBtn = document.getElementById('saveBtn');
         if (document.body.classList.contains('pdd-open')) {
             const h = pddModal.offsetHeight + 12;
             galleryBtn.style.bottom = h + 'px';
@@ -1954,7 +1953,6 @@ function initCustomPinchRotate() {
             if (tlBtn) tlBtn.style.bottom = (h + 128) + 'px';
             if (tlPanelEl) tlPanelEl.style.bottom = h + 'px';
             if (historyBtn) historyBtn.style.bottom = h + 'px';
-            if (saveBtn) saveBtn.style.bottom = (h + 64) + 'px';
         } else {
             galleryBtn.style.bottom = '';
             galleryPanel.style.bottom = '';
@@ -1963,7 +1961,6 @@ function initCustomPinchRotate() {
             if (tlBtn) tlBtn.style.bottom = '';
             if (tlPanelEl) tlPanelEl.style.bottom = '';
             if (historyBtn) historyBtn.style.bottom = '';
-            if (saveBtn) saveBtn.style.bottom = '';
         }
     }
     pddHeader.addEventListener('pointermove', (e) => {
