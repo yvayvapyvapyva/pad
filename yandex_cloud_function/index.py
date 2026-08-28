@@ -8,7 +8,10 @@
 #   2. Укажите в переменных окружения функции:
 #        YDB_ENDPOINT        — например grpcs://ydb.serverless.yandexcloud.net:2135
 #        YDB_DATABASE        — например /ru-central1/b1g.../etn...
-#        TELEGRAM_BOT_TOKEN  — (рекомендуется) токен бота для проверки init_data.
+#        TELEGRAM_BOT_TOKEN  — (рекомендуется) токен бота для проверки init_data
+#                              и отправки отчётов о действиях.
+#        TELEGRAM_REPORT_CHAT_ID — chat_id, куда слать отчёты о действиях
+#                              (необязательно — без него отчёты не отправляются).
 #
 # Безопасность: frontend шлёт user_id и init_data. Если задан TELEGRAM_BOT_TOKEN,
 # сервер проверяет подпись init_data и берёт user_id из неё (надёжно). Иначе
@@ -31,6 +34,12 @@ import urllib.parse
 
 import ydb
 import ydb.iam
+
+try:
+    from notifier import send_report
+except ImportError:
+    def send_report(*args, **kwargs):
+        return False
 
 
 def _scene_path() -> str:
@@ -303,6 +312,7 @@ def _dispatch(session, method, user_id, name, body, owner_user_id=None):
         if data is None:
             raise ValueError("Поле 'data' обязательно")
         saved = _upsert_scene(session, user_id, name, data)
+        send_report(user_id, "save", scene_name=name, status="ok")
         return {"ok": True, "name": saved}
 
     if method == "GET":
@@ -311,6 +321,7 @@ def _dispatch(session, method, user_id, name, body, owner_user_id=None):
             scene = _get_scene(session, target_user, name)
             if scene is None:
                 raise KeyError("Сцена не найдена")
+            send_report(user_id, "load", scene_name=name, status="ok")
             return {"ok": True, **scene}
         return {"ok": True, "scenes": _list_scenes(session, user_id)}
 
@@ -323,12 +334,14 @@ def _dispatch(session, method, user_id, name, body, owner_user_id=None):
         if not old_name:
             raise ValueError("Параметр 'from' обязателен")
         renamed = _rename_scene(session, user_id, old_name, name)
+        send_report(user_id, "rename", scene_name=name, status="ok", extra={"from": old_name})
         return {"ok": True, "name": renamed}
 
     if method == "DELETE":
         if not name:
             raise ValueError("Параметр 'name' обязателен")
         _delete_scene(session, user_id, name)
+        send_report(user_id, "delete", scene_name=name, status="ok")
         return {"ok": True, "name": name}
 
     raise ValueError("Метод не поддерживается: " + method)
