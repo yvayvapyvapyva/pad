@@ -23,6 +23,11 @@
     // Кэш списка сцен. Загружается при запуске приложения и обновляется
     // после сохранения, переименования или удаления сцен.
     let scenesCache = [];
+    // Флаги состояния загрузки списка: идёт ли сейчас загрузка и была ли она завершена
+    // (успешно или с ошибкой). Нужны, чтобы шторка показывала индикатор загрузки
+    // и автоматически обновлялась, когда список наконец загрузится.
+    let scenesLoading = false;
+    let scenesLoaded = false;
 
     // ---- Base64URL кодирование/декодирование для startapp параметра ----
     function b64urlEncode(str) {
@@ -531,7 +536,12 @@
     // ---- Менеджер сцен ----
 
     // Загрузка списка сцен в кэш. Возвращает отсортированный список.
+    // Управляет состоянием загрузки и, если шторка открыта, автоматически
+    // перерисовывает её по завершении (даже если это первая загрузка при старте).
     async function loadScenes() {
+        if (scenesLoading) return scenesCache;
+        scenesLoading = true;
+        setLoadingUI();
         try {
             const json = await api('GET', {});
             scenesCache = (json.scenes || [])
@@ -539,6 +549,10 @@
                 .sort((a, b) => String(a.name).localeCompare(String(b.name)));
         } catch (e) {
             scenesCache = [];
+        } finally {
+            scenesLoading = false;
+            scenesLoaded = true;
+            refreshManager();
         }
         return scenesCache;
     }
@@ -635,13 +649,11 @@
         const btn = document.getElementById('saveBtn');
         if (btn) btn.classList.add('active');
 
-        (async () => {
-            status.classList.remove('busy');
-            status.textContent = scenesCache.length ? '' : 'Нет ни одной сцены';
-            scenesCache.forEach(s => {
-                listBody.appendChild(makeRow(s, status));
-            });
-        })();
+        refreshManager();
+        if (scenesLoading) {
+            // Первая загрузка при старте ещё идёт — loadScenes сам перерисует
+            // список, когда закончит, через refreshManager.
+        }
     }
 
     async function loadScene(scene, statusEl) {
@@ -691,12 +703,32 @@
         });
     }
 
-    // Обновить список в менеджере из кэша без пересоздания окна
+    // Показать состояние загрузки в открытой шторке (если она есть)
+    function setLoadingUI() {
+        if (!managerEl) return;
+        const listBody = managerEl.querySelector('.scene-io-list');
+        const status = managerEl.querySelector('.scene-io-status');
+        if (!listBody || !status) return;
+        listBody.innerHTML = '';
+        status.classList.add('busy');
+        status.textContent = 'Загрузка списка…';
+        const row = document.createElement('div');
+        row.className = 'scene-io-loading';
+        row.innerHTML = '<span class="scene-io-spinner"></span><span>Загрузка сцен…</span>';
+        listBody.appendChild(row);
+    }
+
+    // Обновить список в менеджере из кэша без пересоздания окна.
+    // Пока идёт загрузка — показывает индикатор и надпись, затем — сам список.
     function refreshManager() {
         if (!managerEl) return;
         const listBody = managerEl.querySelector('.scene-io-list');
         const status = managerEl.querySelector('.scene-io-status');
         listBody.innerHTML = '';
+        if (scenesLoading) {
+            setLoadingUI();
+            return;
+        }
         status.classList.remove('busy');
         status.textContent = scenesCache.length ? '' : 'Нет ни одной сцены';
         scenesCache.forEach(s => listBody.appendChild(makeRow(s, status)));
@@ -769,6 +801,9 @@
             + '.scene-io-status{min-height:20px;font-size:13px;color:rgba(255,255,255,0.4);text-align:center;padding:4px 16px;flex-shrink:0;}'
             + '.scene-io-status.busy{color:#FFD60A;}'
             + '.scene-io-status.ok{color:#30D158;}'
+            + '.scene-io-loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px 16px;color:rgba(255,255,255,0.55);font-size:14px;min-height:80px;}'
+            + '.scene-io-spinner{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);border-top-color:#FFD60A;animation:sceneIoSpin .8s linear infinite;flex-shrink:0;}'
+            + '@keyframes sceneIoSpin{to{transform:rotate(360deg);}}'
             + '.scene-io-list{display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1 1 auto;min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 16px;}'
             + '.scene-io-list::-webkit-scrollbar{display:none;}'
             + '.scene-io-item{display:flex;flex-direction:column;gap:2px;padding:14px 16px;border:none;border-radius:14px;background:rgba(255,255,255,0.05);color:#fff;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;min-height:56px;transition:background .15s ease,transform .12s ease,border-color .2s ease;border:1px solid transparent;}'
