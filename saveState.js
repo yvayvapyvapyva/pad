@@ -706,6 +706,7 @@
         const css = document.createElement('style');
         css.textContent = '#saveBtn { top:calc(12px + env(safe-area-inset-top) + var(--tg-top, 0px)); right:calc(50% - 100px); }'
             + '#saveBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }'
+            + '#saveBtn { height:44px; width:44px; border-radius:22px; }'
             + '@keyframes sceneIoSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}'
             + '.scene-io-modal{position:fixed;inset:0;z-index:9500;background:transparent;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;padding:0;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s;-webkit-tap-highlight-color:transparent;}'
             + '.scene-io-modal.visible{opacity:1;visibility:visible;}'
