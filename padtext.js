@@ -16,7 +16,7 @@ let textEditing = null;
 // Размер текста фиксирован в пикселях экрана — не зависит от масштаба карты.
 const TEXT_FONT_SIZE_PX = 16;
 // Ширина свёрнутой иконки «T» в метрах — одинакова на карте при любом масштабе.
-const TEXT_BADGE_WIDTH_M = 5;
+const TEXT_BADGE_WIDTH_M = 3;
 
 function startTextMode() {
     textMode = true;
