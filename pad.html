@@ -1449,7 +1449,7 @@ function updatePicMarker(marker) {
     let imgH;
     if (marker._isZnak) {
         const realH = (marker._sizeM || ZNAK_WIDTH_M) / mpp;
-        imgH = Math.max(15, realH);
+        imgH = Math.max(10, realH);
         marker._img.style.width = imgH + 'px';
         marker._img.style.height = imgH + 'px';
         if (marker._leg) {
