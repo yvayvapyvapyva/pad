@@ -526,7 +526,7 @@
         closeBtn.addEventListener('click', closeManager);
         const headerTitle = document.createElement('div');
         headerTitle.className = 'scene-io-header-title';
-        headerTitle.textContent = 'Сцены';
+        headerTitle.textContent = 'Ваши сцены';
         header.appendChild(closeBtn);
         header.appendChild(headerTitle);
 
