@@ -650,13 +650,13 @@ window.addEventListener('pointermove', e => {
         picGhost.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
         document.body.appendChild(picGhost);
         const geo = screenToGeo(e.clientX, e.clientY);
-        picDrag.h = Math.max(15, (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat) / picDrag.scaleK)) / 2;
+        picDrag.h = Math.max(10, (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat) / picDrag.scaleK)) / 2;
         picDrag.cx = e.clientX;
         picDrag.cy = e.clientY + picDrag.h;
         picDrag.angle = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
     } else if (picGhost) {
         const cGeo = screenToGeo(picDrag.cx, picDrag.cy);
-        picDrag.h = Math.max(15, (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat) / picDrag.scaleK)) / 2;
+        picDrag.h = Math.max(10, (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat) / picDrag.scaleK)) / 2;
         const ang = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
         picDrag.angle = ang;
         picDrag.cx = e.clientX - Math.cos(ang) * picDrag.h;

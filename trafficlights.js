@@ -371,7 +371,7 @@
             const mpp = window.metersPerPixel(marker._lat);
             if (mpp > 0) {
                 realH = TL_HEIGHT_M / mpp;
-                pxH = Math.min(100, Math.max(20, realH));
+                pxH = Math.min(100, Math.max(15, realH));
             }
         }
         marker._tlPx = pxH;
