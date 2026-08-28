@@ -830,6 +830,15 @@
         updatePlayAllBtn();
     };
 
+    // Патч restoreScene: после загрузки/восстановления сцены маркеры получают
+    // _samples, поэтому обновляем видимость кнопки PLAY (иначе запись не запустить).
+    const origRestoreScene = window.restoreScene;
+    window.restoreScene = function (snap) {
+        const result = origRestoreScene ? origRestoreScene(snap) : undefined;
+        updatePlayAllBtn();
+        return result;
+    };
+
     // ---- Индивидуальные фазы мигания поворотников ----
     // Каждая машинка хранит момент включения (_blinkSince) и мигает в своём ритме.
     let _blinkOn = false;
