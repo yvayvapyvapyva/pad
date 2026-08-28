@@ -2230,5 +2230,17 @@ function initCustomPinchRotate() {
     handleStartParam();
 })();
 </script>
+<script>
+// Нажатие любой кнопки интерфейса закрывает открытую шторку менеджера сцен.
+document.addEventListener('pointerdown', (e) => {
+    if (typeof window.closeSceneManager !== 'function') return;
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('.scene-io-modal')) return; // клики внутри шторки её не закрывают
+    if (t.closest('.fab') || t.closest('#pddBtn') || t.closest('#savePddGroup')) {
+        window.closeSceneManager();
+    }
+}, true);
+</script>
 </body>
 </html>

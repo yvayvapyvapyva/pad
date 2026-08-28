@@ -131,6 +131,9 @@
         }
     }
 
+    // Доступ из pad.html: закрытие менеджера при нажатии любой кнопки интерфейса
+    window.closeSceneManager = closeManager;
+
     function closeM(el) {
         el.classList.remove('visible');
         setTimeout(() => el.remove(), 200);
