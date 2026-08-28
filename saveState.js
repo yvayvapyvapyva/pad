@@ -684,6 +684,12 @@
 
     // ---- Кнопка ----
     function init() {
+        const group = document.createElement('div');
+        group.id = 'savePddGroup';
+        const pddBtn = document.getElementById('pddBtn');
+        if (pddBtn) group.appendChild(pddBtn);
+        document.body.appendChild(group);
+
         const btn = document.createElement('button');
         btn.id = 'saveBtn';
         btn.className = 'fab';
@@ -694,12 +700,15 @@
             if (managerEl && managerEl.classList.contains('visible')) closeManager();
             else openManager();
         });
-        document.body.appendChild(btn);
+        group.appendChild(btn);
 
         const css = document.createElement('style');
-        css.textContent = '#saveBtn { top:calc(12px + env(safe-area-inset-top) + var(--tg-top, 0px)); right:calc(50% - 100px); }'
+        css.textContent = '#savePddGroup{position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;z-index:9006;pointer-events:none;touch-action:manipulation;}'
+            + '#savePddGroup > *{pointer-events:auto;}'
+            + '#savePddGroup #pddBtn{position:static;left:auto;transform:none;height:44px;}'
+            + '#savePddGroup #pddBtn:active{transform:scale(0.92);}'
+            + '#saveBtn { top:auto; right:auto; position:static; height:44px; width:44px; border-radius:22px; }'
             + '#saveBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }'
-            + '#saveBtn { height:44px; width:44px; border-radius:22px; }'
             + '@keyframes sceneIoSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}'
             + '.scene-io-modal{position:fixed;inset:0;z-index:9500;background:transparent;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;padding:0;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s;-webkit-tap-highlight-color:transparent;}'
             + '.scene-io-modal.visible{opacity:1;visibility:visible;}'
