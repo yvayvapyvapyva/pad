@@ -366,20 +366,27 @@
         // Динамический размер: высота светофора = TL_HEIGHT_M метров на местности,
         // но не мельче 20px (иначе не ухватить) и не крупнее 100px
         let pxH = window.TL_PX_SIZE;
+        let realH = pxH;
         if (window.metersPerPixel && marker._lat != null && isFinite(marker._lat)) {
             const mpp = window.metersPerPixel(marker._lat);
-            if (mpp > 0) pxH = Math.min(100, Math.max(20, TL_HEIGHT_M / mpp));
+            if (mpp > 0) {
+                realH = TL_HEIGHT_M / mpp;
+                pxH = Math.min(100, Math.max(20, realH));
+            }
         }
         marker._tlPx = pxH;
         marker._tlScale = pxH / TL_BASE_H; // для расчёта границы в setupTopDrag
         marker._tlRoot.style.transform = 'scale(' + marker._tlScale + ')';
         // Ножка: верхние 35% прячутся под корпус (ножка на слое позади).
         // Координаты — от layout-верха rotWrap (64px), визуальный центр корпуса на 32px.
+        // Ножка считается от РЕАЛЬНОГО размера корпуса (без минимума 20px), чтобы она
+        // всегда уменьшалась вместе с масштабом карты.
         if (marker._leg) {
-            const overlap = pxH * 0.35;
-            marker._leg.style.top = ((TL_BASE_H - pxH) / 2 + pxH * 0.65) + 'px';
-            marker._leg.style.height = (pxH * 1.35 / 2) + 'px';
-            marker._leg.style.width = Math.max(2, pxH * 0.09) + 'px';
+            const legH = realH || pxH;
+            const overlap = legH * 0.35;
+            marker._leg.style.top = ((TL_BASE_H - legH) / 2 + legH * 0.65) + 'px';
+            marker._leg.style.height = (legH * 1.35 / 2) + 'px';
+            marker._leg.style.width = (legH * 0.09) + 'px';
         }
         // Панель управления привязана к низу видимого корпуса
         if (marker._ctrl) marker._ctrl.style.top = 'calc(100% + ' + ((pxH - TL_BASE_H) / 2 + 8) + 'px)';

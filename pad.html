@@ -650,13 +650,13 @@ window.addEventListener('pointermove', e => {
         picGhost.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;pointer-events:none;z-index:9999;opacity:0.9;transform:translate(-50%,-50%);';
         document.body.appendChild(picGhost);
         const geo = screenToGeo(e.clientX, e.clientY);
-        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat) / picDrag.scaleK) / 2;
+        picDrag.h = Math.max(15, (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(geo.lat) / picDrag.scaleK)) / 2;
         picDrag.cx = e.clientX;
         picDrag.cy = e.clientY + picDrag.h;
         picDrag.angle = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
     } else if (picGhost) {
         const cGeo = screenToGeo(picDrag.cx, picDrag.cy);
-        picDrag.h = (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat) / picDrag.scaleK) / 2;
+        picDrag.h = Math.max(15, (picDrag.pxH ? picDrag.pxH : picDrag.sizeM / metersPerPixel(cGeo.lat) / picDrag.scaleK)) / 2;
         const ang = Math.atan2(e.clientY - picDrag.cy, e.clientX - picDrag.cx);
         picDrag.angle = ang;
         picDrag.cx = e.clientX - Math.cos(ang) * picDrag.h;
@@ -1448,15 +1448,19 @@ function updatePicMarker(marker) {
     if (!mpp) return;
     let imgH;
     if (marker._isZnak) {
-        imgH = (marker._sizeM || ZNAK_WIDTH_M) / mpp;
+        const realH = (marker._sizeM || ZNAK_WIDTH_M) / mpp;
+        imgH = Math.max(15, realH);
         marker._img.style.width = imgH + 'px';
         marker._img.style.height = imgH + 'px';
         if (marker._leg) {
-            // Ножка длиннее знака: верхние 35% прячутся под знак (ножка на слое позади)
-            const overlap = imgH * 0.35;
-            marker._leg.style.top = (imgH - overlap) + 'px';
-            marker._leg.style.height = (imgH + overlap) + 'px';
-            marker._leg.style.width = Math.max(2, imgH * 0.09) + 'px';
+            // Ножка длиннее знака: верхние 35% прячутся под знак (ножка на слое позади).
+            // Ножка считается от РЕАЛЬНОГО размера знака (не ограниченного минимумом 15px),
+            // чтобы она всегда уменьшалась вместе с масштабом карты.
+            const legH = realH || imgH;
+            const overlap = legH * 0.35;
+            marker._leg.style.top = (legH - overlap) + 'px';
+            marker._leg.style.height = (legH + overlap) + 'px';
+            marker._leg.style.width = (legH * 0.09) + 'px';
         }
     } else {
         imgH = (marker._sizeM || PIC_SIZE_M) / mpp;
