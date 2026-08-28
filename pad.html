@@ -1440,7 +1440,7 @@ let mapRot = 0;
 // pinchRotate отключён: вращение двумя пальцами реализовано кастомно (см. initCustomPinchRotate)
 let appBehaviors = ['drag', 'scrollZoom', 'dblClick', 'pinchZoom', 'pinchTilt', 'mouseTilt', 'mouseRotate'];
 
-function updatePicMarker(marker) {
+function updatePicSize(marker) {
     if (!marker) return;
     if (marker._isTl) { if (window.updateTlMarker) window.updateTlMarker(marker); return; }
     if (!marker._img) return;
@@ -1454,7 +1454,7 @@ function updatePicMarker(marker) {
         marker._img.style.height = imgH + 'px';
         if (marker._leg) {
             // Ножка длиннее знака: верхние 35% прячутся под знак (ножка на слое позади).
-            // Ножка считается от РЕАЛЬНОГО размера знака (не ограниченного минимумом 15px),
+            // Ножка считается от РЕАЛЬНОГО размера знака (не ограниченного минимумом 10px),
             // чтобы она всегда уменьшалась вместе с масштабом карты.
             const legH = realH || imgH;
             const overlap = legH * 0.35;
@@ -1466,7 +1466,6 @@ function updatePicMarker(marker) {
         imgH = (marker._sizeM || PIC_SIZE_M) / mpp;
         marker._img.style.height = imgH + 'px';
     }
-    marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._heading + mapRot}deg)`;
     if (marker._indicators) {
         const s = (TURN_IND_SIZE_M / mpp) + 'px';
         marker._indicators.forEach(ind => {
@@ -1474,11 +1473,37 @@ function updatePicMarker(marker) {
             ind.style.height = s;
         });
     }
+    updatePicTransform(marker);
 }
+
+// Лёгкое обновление: только поворот (transform), без пересчёта размера.
+// Вызывается на каждый кадр воспроизведения — поэтому без metersPerPixel (cos/pow)
+// и без записи style.width/height, чтобы не нагружать layout.
+function updatePicTransform(marker) {
+    if (!marker) return;
+    if (marker._isTl) { if (window.updateTlTransform) window.updateTlTransform(marker); return; }
+    if (marker._rotWrap) marker._rotWrap.style.transform = `translate(-50%,-50%) rotate(${marker._heading + mapRot}deg)`;
+}
+
+function updatePicMarker(marker) {
+    updatePicSize(marker);
+}
+
+// Кэшируем последний zoom: размер маркеров пересчитывается только при его изменении,
+// а не на каждый кадр движения камеры (перемещение не меняет zoom).
+let _lastZoomForSize = null;
 
 function updateAllPicMarkers(event) {
     if (event && event.camera && event.camera.azimuth !== undefined) mapRot = event.camera.azimuth * 180 / Math.PI;
-    placedMarkers.forEach(updatePicMarker);
+    const zoom = map.zoom;
+    if (zoom !== _lastZoomForSize) {
+        // zoom изменился — пересчитываем размер всех маркеров
+        _lastZoomForSize = zoom;
+        placedMarkers.forEach(updatePicSize);
+    } else {
+        // zoom не менялся (перемещение/поворот) — только поворот, без пересчёта размера
+        placedMarkers.forEach(updatePicTransform);
+    }
     positionAllText();
 }
 

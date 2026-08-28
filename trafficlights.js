@@ -359,12 +359,19 @@
         if (window.commit) window.commit();
     };
 
+    // Лёгкое обновление: только поворот, без пересчёта размера.
+    // Вызывается на каждый кадр воспроизведения / при повороте карты без смены zoom.
+    window.updateTlTransform = function (marker) {
+        if (!marker || !marker._rotWrap || marker._tlScale == null) return;
+        marker._rotWrap.style.transform = 'translate(-50%,-50%) rotate(' + (marker._heading + mapRot) + 'deg)';
+    };
+
     // ---- Обновление на карте (вызывается из updatePicMarker) ----
     window.updateTlMarker = function (marker) {
         if (!marker || !marker._tlRoot) return;
-        marker._rotWrap.style.transform = 'translate(-50%,-50%) rotate(' + (marker._heading + mapRot) + 'deg)';
+        if (window.updateTlTransform) window.updateTlTransform(marker);
         // Динамический размер: высота светофора = TL_HEIGHT_M метров на местности,
-        // но не мельче 20px (иначе не ухватить) и не крупнее 100px
+        // но не мельче 15px (иначе не ухватить) и не крупнее 100px
         let pxH = window.TL_PX_SIZE;
         let realH = pxH;
         if (window.metersPerPixel && marker._lat != null && isFinite(marker._lat)) {
@@ -379,7 +386,7 @@
         marker._tlRoot.style.transform = 'scale(' + marker._tlScale + ')';
         // Ножка: верхние 35% прячутся под корпус (ножка на слое позади).
         // Координаты — от layout-верха rotWrap (64px), визуальный центр корпуса на 32px.
-        // Ножка считается от РЕАЛЬНОГО размера корпуса (без минимума 20px), чтобы она
+        // Ножка считается от РЕАЛЬНОГО размера корпуса (без минимума 15px), чтобы она
         // всегда уменьшалась вместе с масштабом карты.
         if (marker._leg) {
             const legH = realH || pxH;

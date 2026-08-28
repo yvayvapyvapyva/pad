@@ -309,10 +309,18 @@
         marker._lat = a.lat + (b.lat - a.lat) * t;
         marker._lon = a.lon + (b.lon - a.lon) * t;
         marker._heading = lerpAngle(a.heading, b.heading, t);
-        marker.update({ coordinates: [marker._lon, marker._lat] });
-        updatePicMarker(marker);
         applySignal(marker, signalAt(marker, e));
     }
+
+    // Применение рассчитанной в sampleAt позиции к маркеру на карте.
+    // Вынесено отдельно, чтобы viewport culling мог пропускать дорогой
+    // marker.update({coordinates}) для машинок за пределами экрана.
+    function applyPosition(marker) {
+        marker.update({ coordinates: [marker._lon, marker._lat] });
+        if (typeof window.updatePicTransform === 'function') window.updatePicTransform(marker);
+        else updatePicMarker(marker);
+    }
+
 
     // ---- Запись ----
     // Частота сэмплов: ~10 кадров/с (100 мс), чтобы уменьшить размер записи.
@@ -464,16 +472,57 @@
     }, true);
 
     // ---- Воспроизведение всех записей ----
+    const MASTER_FRAME_MS = 33; // ~30fps — данные записаны ~10fps, этого достаточно для плавности
+
     function masterFrame() {
         if (!_playAll) { _masterRaf = null; return; }
-        const elapsed = (performance.now() - _masterStart) % _maxDur;
-        let any = false;
-        placedMarkers.forEach(m => {
-            if (m._playing && m._samples && m._samples.length >= 2) { sampleAt(m, elapsed); any = true; }
-        });
-        if (!any) { _playAll = false; _masterRaf = null; updatePlayAllBtn(); return; }
+        const now = performance.now();
+        if (now - _masterLast >= MASTER_FRAME_MS) {
+            _masterLast = now;
+            const elapsed = (now - _masterStart) % _maxDur;
+            const bounds = visibleBounds(); // [[lngMin,latMin],[lngMax,latMax]] или null
+            let any = false;
+            placedMarkers.forEach(m => {
+                if (m._playing && m._samples && m._samples.length >= 2) {
+                    sampleAt(m, elapsed);
+                    if (!bounds || inBounds(bounds, m._lon, m._lat)) applyPosition(m);
+                    any = true;
+                }
+            });
+            if (!any) { _playAll = false; _masterRaf = null; updatePlayAllBtn(); return; }
+        }
         _masterRaf = requestAnimationFrame(masterFrame);
     }
+
+    // Текущие границы видимой области карты [[lngMin,latMin],[lngMax,latMax]] или null.
+    // Yandex Maps v3 не даёт готового getBounds(), поэтому вычисляем приблизительно
+    // из map.center/map.zoom и размера контейнера (Web Mercator).
+    function visibleBounds() {
+        try {
+            const m = map;
+            if (!m || !m.center || !isFinite(m.zoom)) return null;
+            const container = document.getElementById('map');
+            const wpx = container ? container.clientWidth : window.innerWidth;
+            const hpx = container ? container.clientHeight : window.innerHeight;
+            const cLat = m.center[1], cLng = m.center[0];
+            const latRad = cLat * Math.PI / 180;
+            const mpp = 156543.03392 * Math.cos(latRad) / Math.pow(2, m.zoom);
+            const halfW = (wpx / 2) * mpp;
+            const halfH = (hpx / 2) * mpp;
+            const padM = 150; // небольшой запас, чтобы машинка у края не мигала
+            const dLng = (halfW + padM) / (111320 * Math.cos(latRad));
+            const dLat = (halfH + padM) / 110540;
+            return [[cLng - dLng, cLat - dLat], [cLng + dLng, cLat + dLat], m.zoom];
+        } catch (e) { /* ignore */ }
+        return null;
+    }
+
+    // Проверка попадания точки внутри границ (с небольшим запасом).
+    function inBounds(bounds, lon, lat) {
+        const [[lngMin, latMin], [lngMax, latMax]] = bounds;
+        return lon >= lngMin && lon <= lngMax && lat >= latMin && lat <= latMax;
+    }
+
 
     function startAll() {
         if (_playAll) return;
@@ -489,6 +538,7 @@
         _maxDur = maxDurOf(targets);
         _playAll = true;
         _masterStart = performance.now();
+        _masterLast = 0;
         _masterRaf = requestAnimationFrame(masterFrame);
         updatePlayAllBtn();
     }
@@ -502,6 +552,7 @@
             if (!m._playing) return;
             m._playing = false;
             sampleAt(m, m._phaseOffset || 0); // вернуть на отсечённое начало
+            applyPosition(m);
             applySignal(m, m._savedBlink);    // вернуть ручной сигнал
             m._select.style.pointerEvents = '';
             m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
@@ -529,6 +580,7 @@
     // ---- Окно перемотки (долгое нажатие на PLAY) ----
     function scrubTo(marker, t) {
         sampleAt(marker, t - startTrim(marker) + (marker._phaseOffset || 0));
+        applyPosition(marker);
     }
 
     function fmtTime(ms) {
