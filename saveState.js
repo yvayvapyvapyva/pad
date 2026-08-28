@@ -270,10 +270,6 @@
         header.appendChild(closeBtn);
         header.appendChild(headerTitle);
 
-        const title = document.createElement('div');
-        title.className = 'scene-io-title';
-        title.textContent = 'Имя сцены';
-
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'scene-io-input';
@@ -283,22 +279,16 @@
         nameInput.autocomplete = 'off';
 
         const confirm = document.createElement('button');
-        confirm.className = 'scene-io-opt';
+        confirm.className = 'scene-io-opt scene-io-primary';
         confirm.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить</span>';
-
-        const cancel = document.createElement('button');
-        cancel.className = 'scene-io-cancel';
-        cancel.textContent = 'Отмена';
 
         const status = document.createElement('div');
         status.className = 'scene-io-status';
 
         box.appendChild(header);
-        box.appendChild(title);
         box.appendChild(nameInput);
         box.appendChild(confirm);
         box.appendChild(status);
-        box.appendChild(cancel);
         wrap.appendChild(box);
         wrap.addEventListener('click', e => { if (e.target === wrap) { closeM(wrap); } });
         document.body.appendChild(wrap);
@@ -328,7 +318,6 @@
                 confirm.disabled = false;
             }
         });
-        cancel.addEventListener('click', () => closeM(wrap));
         nameInput.addEventListener('keydown', e => {
             if (e.key === 'Enter') { e.preventDefault(); confirm.click(); }
         });
@@ -373,10 +362,6 @@
         ok.className = 'scene-io-opt';
         ok.textContent = okText || 'ОК';
 
-        const cancel = document.createElement('button');
-        cancel.className = 'scene-io-cancel';
-        cancel.textContent = 'Отмена';
-
         const status = document.createElement('div');
         status.className = 'scene-io-status';
 
@@ -384,7 +369,6 @@
         box.appendChild(input);
         box.appendChild(ok);
         box.appendChild(status);
-        box.appendChild(cancel);
         wrap.appendChild(box);
         wrap.addEventListener('click', e => { if (e.target === wrap) closeM(wrap); });
         document.body.appendChild(wrap);
@@ -405,7 +389,6 @@
         };
 
         ok.addEventListener('click', submit);
-        cancel.addEventListener('click', () => closeM(wrap));
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') { e.preventDefault(); submit(); }
         });
@@ -430,14 +413,9 @@
         ok.className = 'scene-io-opt scene-io-danger';
         ok.textContent = okText || 'Удалить';
 
-        const cancel = document.createElement('button');
-        cancel.className = 'scene-io-cancel';
-        cancel.textContent = 'Отмена';
-
         box.appendChild(t);
         box.appendChild(msg);
         box.appendChild(ok);
-        box.appendChild(cancel);
         wrap.appendChild(box);
         wrap.addEventListener('click', e => { if (e.target === wrap) closeM(wrap); });
         document.body.appendChild(wrap);
@@ -453,7 +431,6 @@
                 msg.textContent = 'Ошибка: ' + e.message;
             }
         });
-        cancel.addEventListener('click', () => closeM(wrap));
     }
 
     // ---- Менеджер сцен ----
@@ -713,12 +690,14 @@
             + '.scene-io-box{pointer-events:auto;width:100%;max-width:100%;background:linear-gradient(180deg,rgba(30,30,30,0.98) 0%,rgba(18,18,18,1) 100%);border-radius:20px 20px 0 0;border-top:0.5px solid rgba(255,255,255,0.1);padding:0 0 env(safe-area-inset-bottom) 0;display:flex;flex-direction:column;gap:0;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,0.5);}'
             + '.scene-io-modal.visible .scene-io-box{transform:translateY(0);}'
             + '.scene-io-modal.scene-io-center{background:rgba(0,0,0,0.6);pointer-events:auto;display:flex;align-items:center;justify-content:center;padding:24px;}'
-            + '.scene-io-modal.scene-io-center .scene-io-box{width:100%;max-width:320px;border-radius:16px;border:0.5px solid rgba(255,255,255,0.12);padding:16px;gap:12px;transform:translateY(0) scale(0.95);transition:transform .2s ease;max-height:85vh;box-shadow:0 20px 60px rgba(0,0,0,0.5);}'
+            + '.scene-io-modal.scene-io-center .scene-io-box{width:100%;max-width:320px;border-radius:16px;border:0.5px solid rgba(255,255,255,0.12);padding:12px 16px 16px;gap:12px;transform:translateY(0) scale(0.95);transition:transform .2s ease;max-height:85vh;box-shadow:0 20px 60px rgba(0,0,0,0.5);}'
             + '.scene-io-modal.scene-io-center.visible .scene-io-box{transform:translateY(0) scale(1);}'
             + '.scene-io-modal.scene-io-center .scene-io-input{margin:0;}'
+            + '.scene-io-modal.scene-io-center .scene-io-header{padding:0 0 6px;}'
             + '.scene-io-modal.scene-io-center .scene-io-opt{width:100%;margin:0;}'
             + '.scene-io-modal.scene-io-center .scene-io-cancel{width:100%;margin:0;border-radius:12px;}'
             + '.scene-io-modal.scene-io-center .scene-io-confirm-msg{padding:0 4px 4px;}'
+            + '.scene-io-status:empty{display:none;}'
             + '.scene-io-header{display:flex;align-items:center;gap:8px;padding:10px 10px 8px;border-bottom:0.5px solid rgba(255,255,255,0.1);flex-shrink:0;touch-action:none;user-select:none;-webkit-user-select:none;}'
             + '.scene-io-header-title{font-size:16px;font-weight:700;flex:1;text-align:center;color:#fff;letter-spacing:-0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
             + '.scene-io-close{width:30px;height:30px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;flex-shrink:0;margin-left:auto;order:2;}'
