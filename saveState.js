@@ -20,6 +20,10 @@
     // Имя активной (загруженной на карту) сцены. null — активной сцены нет.
     let activeSceneName = null;
 
+    // Кэш списка сцен. Загружается при запуске приложения и обновляется
+    // после сохранения, переименования или удаления сцен.
+    let scenesCache = [];
+
     // ---- Base64URL кодирование/декодирование для startapp параметра ----
     function b64urlEncode(str) {
         return btoa(unescape(encodeURIComponent(str)))
@@ -330,11 +334,7 @@
             prefill: prefill,
             callback: (name) => {
                 activeSceneName = name;
-                if (managerEl) {
-                    const rows = managerEl.querySelectorAll('.scene-io-item');
-                    rows.forEach(r => r.classList.toggle('active', r.querySelector('.scene-io-item-name').textContent === name));
-                    refreshManager();
-                }
+                reloadScenes();
             }
         });
     }
@@ -450,6 +450,66 @@
     }
 
     // ---- Менеджер сцен ----
+
+    // Загрузка списка сцен в кэш. Возвращает отсортированный список.
+    async function loadScenes() {
+        try {
+            const json = await api('GET', {});
+            scenesCache = (json.scenes || [])
+                .slice()
+                .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        } catch (e) {
+            scenesCache = [];
+        }
+        return scenesCache;
+    }
+
+    // Общий конструктор строки списка
+    function makeRow(scene, statusEl) {
+        const row = document.createElement('div');
+        row.className = 'scene-io-item' + (activeSceneName === scene.name ? ' active' : '');
+        row.addEventListener('click', () => loadScene(scene, statusEl));
+        const main = document.createElement('div');
+        main.className = 'scene-io-item-main';
+        const left = document.createElement('div');
+        left.className = 'scene-io-item-left';
+        const nm = document.createElement('div');
+        nm.className = 'scene-io-item-name';
+        nm.textContent = scene.name;
+        left.appendChild(nm);
+        const meta = document.createElement('div');
+        meta.className = 'scene-io-item-meta';
+        const parts = [];
+        if (scene.sizeBytes) parts.push(formatSize(scene.sizeBytes));
+        if (scene.savedAt) parts.push(new Date(scene.savedAt).toLocaleString());
+        meta.textContent = parts.join(' · ');
+        left.appendChild(meta);
+        main.appendChild(left);
+        const btns = document.createElement('div');
+        btns.className = 'scene-io-item-btns';
+        const mkBtn = (title, svg, onClick) => {
+            const b = document.createElement('button');
+            b.className = 'scene-io-item-btn';
+            b.title = title;
+            b.setAttribute('aria-label', title);
+            b.innerHTML = svg;
+            b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+            return b;
+        };
+        btns.appendChild(mkBtn('Переименовать',
+            '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
+            () => renameScene(scene, statusEl)));
+        btns.appendChild(mkBtn('Поделиться',
+            '<svg viewBox="0 0 24 24" width="18" height="18" fill="#0A84FF"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>',
+            () => copyShareLink(tgCreds().user_id, scene.name)));
+        btns.appendChild(mkBtn('Удалить',
+            '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
+            () => deleteScene(scene, statusEl)));
+        main.appendChild(btns);
+        row.appendChild(main);
+        return row;
+    }
+
     function openManager() {
         if (managerEl) { managerEl.classList.add('visible'); return; }
 
@@ -496,75 +556,12 @@
         if (btn) btn.classList.add('active');
 
         (async () => {
-            try {
-                const json = await api('GET', {});
-                const scenes = (json.scenes || [])
-                    .slice()
-                    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
-                status.classList.remove('busy');
-                status.textContent = scenes.length ? '' : 'Нет ни одной сцены';
-                scenes.forEach(s => {
-                    listBody.appendChild(buildSceneRow(s, status, listBody));
-                });
-            } catch (e) {
-                status.classList.remove('busy');
-                status.textContent = 'Ошибка: ' + e.message;
-            }
+            status.classList.remove('busy');
+            status.textContent = scenesCache.length ? '' : 'Нет ни одной сцены';
+            scenesCache.forEach(s => {
+                listBody.appendChild(makeRow(s, status));
+            });
         })();
-
-        function buildSceneRow(scene, statusEl, listEl) {
-            const row = document.createElement('div');
-            row.className = 'scene-io-item' + (activeSceneName === scene.name ? ' active' : '');
-            row.addEventListener('click', () => loadScene(scene, statusEl));
-
-            const main = document.createElement('div');
-            main.className = 'scene-io-item-main';
-
-            const left = document.createElement('div');
-            left.className = 'scene-io-item-left';
-            const nm = document.createElement('div');
-            nm.className = 'scene-io-item-name';
-            nm.textContent = scene.name;
-            left.appendChild(nm);
-            const meta = document.createElement('div');
-            meta.className = 'scene-io-item-meta';
-            const parts = [];
-            if (scene.sizeBytes) parts.push(formatSize(scene.sizeBytes));
-            if (scene.savedAt) parts.push(new Date(scene.savedAt).toLocaleString());
-            meta.textContent = parts.join(' · ');
-            left.appendChild(meta);
-            main.appendChild(left);
-
-            const btns = document.createElement('div');
-            btns.className = 'scene-io-item-btns';
-
-            const mkBtn = (title, svg, onClick) => {
-                const b = document.createElement('button');
-                b.className = 'scene-io-item-btn';
-                b.title = title;
-                b.setAttribute('aria-label', title);
-                b.innerHTML = svg;
-                b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
-                return b;
-            };
-
-            const renameBtn = mkBtn('Переименовать',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
-                () => renameScene(scene, statusEl));
-            const shareBtn = mkBtn('Поделиться',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#0A84FF"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>',
-                () => copyShareLink(tgCreds().user_id, scene.name));
-            const delBtn = mkBtn('Удалить',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
-                () => deleteScene(scene, statusEl));
-
-            btns.appendChild(renameBtn);
-            btns.appendChild(shareBtn);
-            btns.appendChild(delBtn);
-            main.appendChild(btns);
-            row.appendChild(main);
-            return row;
-        }
     }
 
     async function loadScene(scene, statusEl) {
@@ -596,7 +593,7 @@
                 await api('PUT', { body: { name: newName, from: scene.name } });
                 if (activeSceneName === scene.name) activeSceneName = newName;
                 closeM(wrap);
-                refreshManager();
+                reloadScenes();
             }
         });
     }
@@ -609,77 +606,27 @@
             onOk: async () => {
                 await api('DELETE', { query: { name: scene.name } });
                 if (activeSceneName === scene.name) activeSceneName = null;
-                refreshManager();
+                reloadScenes();
             }
         });
     }
 
-    // Обновить список в менеджере без пересоздания окна
-    async function refreshManager() {
+    // Обновить список в менеджере из кэша без пересоздания окна
+    function refreshManager() {
         if (!managerEl) return;
         const listBody = managerEl.querySelector('.scene-io-list');
         const status = managerEl.querySelector('.scene-io-status');
         listBody.innerHTML = '';
-        status.classList.add('busy');
-        status.textContent = 'Обновление…';
-        try {
-            const json = await api('GET', {});
-            const scenes = (json.scenes || [])
-                .slice()
-                .sort((a, b) => String(a.name).localeCompare(String(b.name)));
-            status.classList.remove('busy');
-            status.textContent = scenes.length ? '' : 'Нет ни одной сцены';
-            scenes.forEach(s => listBody.appendChild(buildRow(s)));
-        } catch (e) {
-            status.classList.remove('busy');
-            status.textContent = 'Ошибка: ' + e.message;
-        }
+        status.classList.remove('busy');
+        status.textContent = scenesCache.length ? '' : 'Нет ни одной сцены';
+        scenesCache.forEach(s => listBody.appendChild(makeRow(s, status)));
+    }
 
-        // Перемещаем buildRow сюда, чтобы использовать в refreshManager
-        function buildRow(scene) {
-            const row = document.createElement('div');
-            row.className = 'scene-io-item' + (activeSceneName === scene.name ? ' active' : '');
-            row.addEventListener('click', () => loadScene(scene, status));
-            const main = document.createElement('div');
-            main.className = 'scene-io-item-main';
-            const left = document.createElement('div');
-            left.className = 'scene-io-item-left';
-            const nm = document.createElement('div');
-            nm.className = 'scene-io-item-name';
-            nm.textContent = scene.name;
-            left.appendChild(nm);
-            const meta = document.createElement('div');
-            meta.className = 'scene-io-item-meta';
-            const parts = [];
-            if (scene.sizeBytes) parts.push(formatSize(scene.sizeBytes));
-            if (scene.savedAt) parts.push(new Date(scene.savedAt).toLocaleString());
-            meta.textContent = parts.join(' · ');
-            left.appendChild(meta);
-            main.appendChild(left);
-            const btns = document.createElement('div');
-            btns.className = 'scene-io-item-btns';
-            const mkBtn = (title, svg, onClick) => {
-                const b = document.createElement('button');
-                b.className = 'scene-io-item-btn';
-                b.title = title;
-                b.setAttribute('aria-label', title);
-                b.innerHTML = svg;
-                b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
-                return b;
-            };
-            btns.appendChild(mkBtn('Переименовать',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
-                () => renameScene(scene, status)));
-            btns.appendChild(mkBtn('Поделиться',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#0A84FF"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>',
-                () => copyShareLink(tgCreds().user_id, scene.name)));
-            btns.appendChild(mkBtn('Удалить',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
-                () => deleteScene(scene, status)));
-            main.appendChild(btns);
-            row.appendChild(main);
-            return row;
-        }
+    // Обновить кэш сцен и, если шторка открыта, перерисовать список.
+    // Вызывается после сохранения, переименования или удаления.
+    async function reloadScenes() {
+        await loadScenes();
+        refreshManager();
     }
 
     // ---- Кнопка ----
@@ -765,6 +712,8 @@
             + '.scene-io-opt.scene-io-primary:disabled{background:rgba(48,209,88,0.5);}'
             + '.scene-io-opt.scene-io-primary .scene-io-opt-icon svg{fill:#000;}';
         document.head.appendChild(css);
+
+        loadScenes();
     }
 
     if (document.readyState === 'loading') {
