@@ -55,10 +55,9 @@
     async function api(method, { body, query } = {}) {
         const creds = tgCreds();
         // Для GET/DELETE передаём user_id и init_data в query-строке
-        if (query) {
-            if (creds.user_id && query.user_id == null) query.user_id = creds.user_id;
-            if (creds.init_data && query.initData == null) query.initData = creds.init_data;
-        }
+        query = Object.assign({}, query || {});
+        if (creds.user_id && query.user_id == null) query.user_id = creds.user_id;
+        if (creds.init_data && query.initData == null) query.initData = creds.init_data;
         let url = API_URL;
         if (query && Object.keys(query).length) {
             const qs = Object.keys(query)

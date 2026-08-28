@@ -26,12 +26,16 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 import urllib.parse
 import urllib.request
 
 import ydb
 import ydb.credentials
+
+logging.basicConfig(level=logging.INFO)
+_log = logging.getLogger("initdata")
 
 
 def _scene_path() -> str:
@@ -177,8 +181,14 @@ def _extract_user_id(body) -> str:
         or (body.get("initData") if isinstance(body, dict) else None)
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
 
+    _log.info("extract: has_init_data=%s has_env_token=%s env_token_len=%s",
+              bool(init_data), bool(token), len(token) if token else 0)
+    _log.info("extract: init_data_len=%s init_data_head=%r", len(init_data) if init_data else 0,
+              (init_data[:60] + "...") if init_data else None)
+
     if init_data and token:
         user = _validate_init_data(init_data, token)
+        _log.info("extract: validate returned user=%s", bool(user))
         if user is None or "id" not in user:
             raise PermissionError("Не удалось проверить подпись Telegram initData")
         return str(user["id"])
@@ -207,7 +217,11 @@ def _validate_init_data(init_data: str, bot_token: str):
     try:
         data = urllib.parse.parse_qs(init_data, keep_blank_values=True)
         received = data.get("hash", [None])[0]
+        user_json = data.get("user", [None])[0]
+        fields = sorted(k for k in data if k != "hash") if data else []
+        _log.info("validate: has_hash=%s has_user=%s fields=%s", bool(received), bool(user_json), fields)
         if not received:
+            _log.warning("validate: no hash field in init_data")
             return None
         check = "\n".join(
             "{}={}".format(k, data[k][0])
@@ -219,13 +233,17 @@ def _validate_init_data(init_data: str, bot_token: str):
         calc = hmac.new(
             key=secret_key, msg=check.encode("utf-8"), digestmod=hashlib.sha256
         ).hexdigest()
+        _log.info("validate: calc_hash=%s received_hash=%s match=%s",
+                  calc, received, hmac.compare_digest(calc, received))
         if not hmac.compare_digest(calc, received):
+            _log.warning("validate: HMAC mismatch")
             return None
-        user_json = data.get("user", [None])[0]
         if not user_json:
+            _log.warning("validate: no user field in init_data")
             return None
         return json.loads(user_json)
-    except Exception:
+    except Exception as e:
+        _log.warning("validate: exception %r", e)
         return None
 
 
