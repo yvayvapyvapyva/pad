@@ -165,6 +165,11 @@
                 color: l.color || '#000000',
                 width: l.width || 5
             })),
+            texts: (Array.isArray(data.texts) ? data.texts : []).map(t => ({
+                lat: t.lat,
+                lon: t.lon,
+                text: t.text || ''
+            })),
             markers: markers.map(m => ({
                 kind: m.kind || 'pic',
                 file: m.file,

@@ -81,6 +81,7 @@
         #eraserBtn.active { background:rgba(255,59,48,0.55); border-color:#FF453A; }
         #drawBtn { top:calc(12px + env(safe-area-inset-top)); left:12px; }
         #eraserBtn { top:calc(12px + env(safe-area-inset-top)); left:76px; }
+        #textBtn { top:calc(12px + env(safe-area-inset-top)); left:140px; }
         #addPicBtn { bottom:calc(12px + env(safe-area-inset-bottom)); left:12px; border-radius:12px; overflow:hidden; transition:bottom .25s ease; }
         #addPicBtn img { width:100%; height:100%; object-fit:contain; padding:5px; border-radius:10px; pointer-events:none; box-sizing:border-box; }
         #addZnakBtn { bottom:calc(76px + env(safe-area-inset-bottom)); left:12px; border-radius:12px; overflow:hidden; transition:bottom .25s ease; }
@@ -123,6 +124,7 @@
         #pddBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
         /* Режим скрытия элементов управления (долгое нажатие на ПДД) */
         body.controls-hidden .fab:not(#pddBtn),
+        body.controls-hidden #textBtn,
         body.controls-hidden #rotateBtn,
         body.controls-hidden #historyBtn,
         body.controls-hidden .sig-fab,
@@ -310,7 +312,26 @@
         @keyframes spin { to { transform:rotate(360deg); } }
         .pic-marker { max-width:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none; }
         .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
-        /* Ножка дорожного знака: заходит под знак и рендерится позади него */
+        /* Текстовое поле на карте: фиксируется относительно центра левого верхнего угла */
+        .text-item {
+            position:relative; transform:translate(-50%,-50%); cursor:grab;
+            -webkit-user-select:text; user-select:text; -webkit-touch-callout:none;
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+            font-weight:600; color:#000; line-height:1.2; text-align:center;
+        }
+        .text-input {
+            display:block; box-sizing:border-box; width:max-content; min-width:60px; max-width:calc(100vw - 24px);
+            padding:4px 8px; margin:0; overflow:hidden;
+            background:rgba(255,255,255,0.85); color:#000; border:1px solid rgba(0,0,0,0.35); border-radius:6px;
+            font:inherit; outline:none; -webkit-user-select:text; user-select:text;
+            touch-action:manipulation; white-space:pre-wrap; overflow-wrap:anywhere;
+            text-align:left; cursor:text;
+        }
+        .text-input.empty::before { content:attr(data-placeholder); color:rgba(0,0,0,0.35); }
+        .text-item.fixed .text-input { border:none; background:transparent; color:#000; text-shadow:0 1px 2px rgba(255,255,255,0.8), 0 0 3px rgba(255,255,255,0.9); width:max-content; }
+        .text-item.fixed .text-input.empty::before { content:''; }
+        .text-item .text-input:focus { border-color:rgba(0,0,0,0.35); }
+
         .sign-leg {
             position:absolute; left:50%; transform:translateX(-50%);
             background:#8E8E93; border-radius:2px; pointer-events:none;
@@ -368,7 +389,7 @@
         :root { --tg-top: 0px; }
         /* Кнопка ПДД остаётся у верхнего края и не смещается на --tg-top */
         #pddBtn { top: calc(12px + env(safe-area-inset-top)); }
-        #drawBtn, #eraserBtn, #rotateBtn { top: calc(12px + env(safe-area-inset-top) + var(--tg-top)); }
+        #drawBtn, #eraserBtn, #textBtn, #rotateBtn { top: calc(12px + env(safe-area-inset-top) + var(--tg-top)); }
         #locateBtn, #signalBtns, #tlMini, #colorPanel { top: calc(76px + env(safe-area-inset-top) + var(--tg-top)); }
         #widthSlider { top: calc(180px + env(safe-area-inset-top) + var(--tg-top)); }
     </style>
@@ -388,6 +409,9 @@
 </button>
 <button id="eraserBtn" class="fab">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><g transform="rotate(45 12 12)"><rect x="7.75" y="2" width="8.5" height="12" rx="2"/><rect x="7.75" y="15" width="8.5" height="6.5" rx="2"/></g></svg>
+</button>
+<button id="textBtn" class="fab" title="Текст">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><path d="M5 4v3h5.5v12.5h3V7H19V4z"/></svg>
 </button>
 <button id="locateBtn" class="fab">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
@@ -469,6 +493,7 @@
 let map = null, userMarker = null, lastPos = null;
 let placedMarkers = [], selectedPic = null, drawMode = false, drawFeature = null, drawing = false;
 let eraserMode = false, drawnLines = [], eraserDrag = false;
+let textMode = false, textItems = [], textEditing = null;
 let drawColor = '#000000';
 let drawWidth = 5;
 let drawPointerId = null;
@@ -732,15 +757,243 @@ function stopEraser() {
     map.update({ behaviors: appBehaviors });
 }
 
+// ---- Режим текста: добавление текстовых надписей на карту ----
+// Размер текста фиксирован в пикселях экрана — не зависит от масштаба карты.
+const TEXT_FONT_SIZE_PX = 16;
+
+function startTextMode() {
+    textMode = true;
+    setActiveCar(null);
+    setMarkersDraggable(false);
+    setHandlesVisible(false);
+    document.getElementById('textBtn').classList.add('active');
+    document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
+    selectedPic = null;
+    document.getElementById('colorPanel').classList.remove('visible');
+    document.getElementById('widthSlider').classList.remove('visible');
+    map.update({ behaviors: [] });
+}
+
+function stopTextMode() {
+    textMode = false;
+    commitTextEditing();
+    setMarkersDraggable(true);
+    setHandlesVisible(true);
+    document.getElementById('textBtn').classList.remove('active');
+    map.update({ behaviors: appBehaviors });
+}
+
+// Создание YMapMarker-маркера с textarea внутри
+function makeTextMarker(lat, lon, ta) {
+    const el = document.createElement('div');
+    el.className = 'text-item';
+    el.appendChild(ta);
+    const marker = new ymaps3.YMapMarker({
+        coordinates: [lon, lat],
+        onDragMove: (coords) => {
+            marker._lat = coords[1];
+            marker._lon = coords[0];
+        }
+    }, el);
+    marker._lat = lat;
+    marker._lon = lon;
+    marker._select = el;
+    marker._ta = ta;
+    setupTextLongPress(marker);
+    return marker;
+}
+
+// Долгое нажатие на уже установленный (fixed) текст — переход в режим редактирования
+function setupTextLongPress(marker) {
+    const el = marker._select;
+    let timer = null, longFired = false, sx = 0, sy = 0;
+    el.addEventListener('pointerdown', (e) => {
+        if (marker._fixed && !textEditing) {
+            sx = e.clientX; sy = e.clientY;
+            longFired = false;
+            timer = setTimeout(() => { longFired = true; startEditingText(marker); }, 1000);
+        }
+    });
+    el.addEventListener('pointermove', (e) => {
+        if (!timer) return;
+        if (Math.hypot(e.clientX - sx, e.clientY - sy) > 8) clearLongPress();
+    });
+    el.addEventListener('pointerup', clearLongPress);
+    el.addEventListener('pointercancel', clearLongPress);
+    function clearLongPress() {
+        if (timer) { clearTimeout(timer); timer = null; }
+    }
+}
+
+// Вход в режим редактирования установленного текста
+function startEditingText(marker) {
+    if (textEditing) commitTextEditing();
+    const ta = marker._ta;
+    if (!ta) return;
+    textMode = true;
+    document.getElementById('textBtn').classList.add('active');
+    map.update({ behaviors: [] }, 0);
+    marker._fixed = false;
+    marker.update({ draggable: false });
+    marker._select.classList.remove('fixed');
+    ta.classList.remove('empty');
+    ta.setAttribute('contenteditable', 'true');
+    textEditing = { marker, ta };
+    positionTextMarker(marker);
+    scheduleTextResize(marker);
+    requestAnimationFrame(() => {
+        if (!textEditing || textEditing.marker !== marker) return;
+        ta.focus();
+        const r = window.getSelection();
+        if (r) { r.selectAllChildren(ta); r.collapseToEnd(); }
+        try { ta.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    });
+}
+
+// Восстановление сохранённого текста (readonly)
+function buildTextItem(lat, lon, text) {
+    const ta = document.createElement('div');
+    ta.className = 'text-input';
+    ta.setAttribute('contenteditable', 'false');
+    ta.textContent = text || '';
+    const marker = makeTextMarker(lat, lon, ta);
+    marker._fixed = true;
+    ta.classList.add('fixed');
+    positionTextMarker(marker);
+    resizeTa(marker);
+    return marker;
+}
+
+// Размещение нового текстового поля на карте по координатам касания
+function placeTextField(lat, lon) {
+    if (textEditing) commitTextEditing();
+    const ta = document.createElement('div');
+    ta.className = 'text-input empty';
+    ta.setAttribute('contenteditable', 'true');
+    ta.setAttribute('role', 'textbox');
+    ta.setAttribute('aria-label', 'Текст');
+    ta.setAttribute('data-placeholder', 'Введите текст…');
+    ta.spellcheck = false;
+    const marker = makeTextMarker(lat, lon, ta);
+    // Пока поле редактируется — маркер не должен перетаскиваться и перехватывать фокус
+    marker.update({ draggable: false });
+    const syncEmpty = () => ta.classList.toggle('empty', !(ta.textContent || '').trim());
+    ta.addEventListener('input', () => { syncEmpty(); scheduleTextResize(marker); });
+
+    // Enter — перенос строки (поле продолжает расти); Escape — отмена без сохранения.
+    ta.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            document.execCommand('insertLineBreak');
+            syncEmpty();
+            scheduleTextResize(marker);
+        } else if (e.key === 'Escape') {
+            commitTextEditing();
+        }
+    });
+
+    ta.addEventListener('paste', () => setTimeout(() => { syncEmpty(); scheduleTextResize(marker); }, 0));
+
+    // Касание/клик по полю — продолжить редактирование; не даём маркеру начать драг
+    marker._select.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        if (e.target === ta || ta.contains(e.target)) {
+            // сам текст — даём браузеру открыть клавиатуру и фокус
+            return;
+        }
+        if (drawMode || eraserMode || textMode) e.preventDefault();
+    });
+
+    map.addChild(marker);
+    textItems.push(marker);
+    textEditing = { marker, ta };
+    positionTextMarker(marker);
+    // Фокус сразу в поле — чтобы можно было вводить текст без дополнительного касания
+    requestAnimationFrame(() => {
+        if (!textEditing || textEditing.marker !== marker) return;
+        ta.focus();
+        const r = window.getSelection();
+        if (r) {
+            r.selectAllChildren(ta);
+            r.collapseToEnd();
+        }
+        try { ta.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    });
+    scheduleTextResize(marker);
+}
+
+// Позиционирование/размер текстового поля — фиксированный экранный размер,
+// не зависит от масштаба карты. Маркер остаётся привязанным к своей гео-точке.
+function positionTextMarker(marker) {
+    const el = marker._select;
+    if (!el) return;
+    el.style.fontSize = TEXT_FONT_SIZE_PX + 'px';
+}
+
+function positionAllText() {
+    textItems.forEach(positionTextMarker);
+    if (textEditing) scheduleTextResize(textEditing.marker);
+}
+
+// Пересчёт высоты поля под содержимое (ширину текст-поле задаёт само, по содержимому)
+function resizeTa(marker) {
+    const ta = marker._ta;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    if (ta.scrollHeight > 0) ta.style.height = ta.scrollHeight + 'px';
+}
+
+// Перенос строк: текст растёт до максимальной ширины экрана, затем переносится
+function scheduleTextResize(marker) {
+    const ta = marker._ta;
+    if (!ta) return;
+    clearTimeout(marker._rzTimer);
+    marker._rzTimer = setTimeout(() => resizeTa(marker), 30);
+}
+
+// Фиксация текста: редактирование завершено, поле остаётся на карте
+function commitTextEditing() {
+    if (!textEditing) return;
+    const { marker, ta } = textEditing;
+    textEditing = null;
+    clearTimeout(marker._rzTimer);
+    if (!(ta.textContent || '').trim()) {
+        removeTextItem(marker);
+        commit();
+        return;
+    }
+    marker._fixed = true;
+    ta.setAttribute('contenteditable', 'false');
+    ta.classList.remove('empty');
+    ta.classList.add('fixed');
+    positionTextMarker(marker);
+    commit();
+}
+
+function removeTextItem(marker) {
+    map.removeChild(marker);
+    const idx = textItems.indexOf(marker);
+    if (idx !== -1) textItems.splice(idx, 1);
+    if (textEditing && textEditing.marker === marker) textEditing = null;
+}
+
 function eraseLine(line) {
     if (line.feature) map.removeChild(line.feature);
     drawnLines.splice(drawnLines.indexOf(line), 1);
 }
 
-// Удаление машинки/знака/светофора под точкой экрана (режим ластика)
+// Удаление машинки/знака/светофора/текста под точкой экрана (режим ластика)
 function eraseMarkerAtScreen(x, y) {
     const el = document.elementFromPoint(x, y);
-    const mEl = el && el.closest ? el.closest('.pic-marker') : null;
+    if (!el || !el.closest) return;
+    const tEl = el.closest('.text-item');
+    if (tEl) {
+        const t = textItems.find(mk => mk._select === tEl);
+        if (t) removeTextItem(t);
+        return;
+    }
+    const mEl = el.closest('.pic-marker');
     if (!mEl) return;
     const m = placedMarkers.find(mk => mk._select === mEl);
     if (m) removeMarker(m);
@@ -815,8 +1068,10 @@ function unpackRecSamples(arr) {
 }
 
 function serializeScene() {
+    if (textEditing) commitTextEditing();
     return {
         lines: drawnLines.map(l => ({ coords: l.coords.map(c => c.slice()), color: l.color || '#000000', width: l.width || 5 })),
+        texts: textItems.map(m => ({ lat: m._lat, lon: m._lon, text: m._ta ? m._ta.textContent || '' : '' })),
         markers: placedMarkers.map(m => ({
             kind: m._isTl ? 'tl' : (m._isZnak ? 'znak' : 'pic'),
             file: m._isTl ? m._tlType : m._file,
@@ -835,7 +1090,10 @@ function restoreScene(snap) {
     lastDrawScreen = null;
     if (drawMode) stopDraw();
     if (eraserMode) stopEraser();
+    if (textMode) stopTextMode();
+    else if (textEditing) commitTextEditing();
     placedMarkers.slice().forEach(m => removeMarker(m));
+    textItems.slice().forEach(m => removeTextItem(m));
     drawnLines.forEach(l => { if (l.feature) map.removeChild(l.feature); });
     drawnLines = [];
     snap.lines.forEach(l => {
@@ -874,13 +1132,18 @@ function restoreScene(snap) {
     });
     if (activeCar && placedMarkers.indexOf(activeCar) === -1) activeCar = null;
     if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.add('car-active');
+    (snap.texts || []).forEach(d => {
+        const m = buildTextItem(d.lat, d.lon, d.text);
+        map.addChild(m);
+        textItems.push(m);
+    });
     updateSignalBtns();
 }
 
 function commit() {
     if (_restoring) return;
     const snap = serializeScene();
-    const json = JSON.stringify({ lines: snap.lines, markers: snap.markers.map(r => ({ kind: r.kind, file: r.file, lat: r.lat, lon: r.lon, heading: r.heading, leg: r.leg })) });
+    const json = JSON.stringify({ lines: snap.lines, texts: snap.texts, markers: snap.markers.map(r => ({ kind: r.kind, file: r.file, lat: r.lat, lon: r.lon, heading: r.heading, leg: r.leg })) });
     if (undoStack.length && undoStack[undoStack.length - 1]._json === json) return;
     snap._json = json;
     undoStack.push(snap);
@@ -1276,6 +1539,8 @@ function removeMarker(marker) {
 function clearEverything() {
     if (drawMode) stopDraw();
     if (eraserMode) stopEraser();
+    if (textMode) stopTextMode();
+    else if (textEditing) commitTextEditing();
     drawing = false;
     drawFeature = null;
     lineCoords = [];
@@ -1284,6 +1549,7 @@ function clearEverything() {
     drawnLines.forEach(line => { if (line.feature) map.removeChild(line.feature); });
     drawnLines = [];
     placedMarkers.slice().forEach(m => removeMarker(m));
+    textItems.slice().forEach(m => removeTextItem(m));
     document.getElementById('picPanel').classList.remove('visible');
     document.getElementById('addPicBtn').classList.remove('open');
     document.getElementById('znakPanel').classList.remove('visible');
@@ -1417,6 +1683,7 @@ function updatePicMarker(marker) {
 function updateAllPicMarkers(event) {
     if (event && event.camera && event.camera.azimuth !== undefined) mapRot = event.camera.azimuth * 180 / Math.PI;
     placedMarkers.forEach(updatePicMarker);
+    positionAllText();
 }
 
 // Кастомный пинч-поворот карты двумя пальцами: штатный pinchRotate отключён,
@@ -1489,6 +1756,11 @@ function initCustomPinchRotate() {
                 if (event.screenCoordinates) eraseMarkerAtScreen(event.screenCoordinates[0], event.screenCoordinates[1]);
                 return;
             }
+            if (textMode) {
+                if (!event?.coordinates) return;
+                placeTextField(event.coordinates[1], event.coordinates[0]);
+                return;
+            }
             if (!drawMode || !event?.coordinates || drawing) return;
             drawing = true;
             drawPointerId = event.pointerId;
@@ -1549,6 +1821,7 @@ function initCustomPinchRotate() {
             const dlTlB = document.getElementById('addTlBtn');
             if (dlTlP) dlTlP.classList.remove('visible');
             if (dlTlB) dlTlB.classList.remove('open');
+            if (textMode) stopTextMode();
             startDraw();
         }
     });
@@ -1582,7 +1855,26 @@ function initCustomPinchRotate() {
             const elTlB = document.getElementById('addTlBtn');
             if (elTlP) elTlP.classList.remove('visible');
             if (elTlB) elTlB.classList.remove('open');
+            if (textMode) stopTextMode();
             startEraser();
+        }
+    });
+
+    document.getElementById('textBtn').addEventListener('click', () => {
+        if (textMode) {
+            stopTextMode();
+        } else {
+            if (drawMode) stopDraw();
+            if (eraserMode) stopEraser();
+            document.getElementById('picPanel').classList.remove('visible');
+            document.getElementById('addPicBtn').classList.remove('open');
+            document.getElementById('znakPanel').classList.remove('visible');
+            document.getElementById('addZnakBtn').classList.remove('open');
+            const txTlP = document.getElementById('tlPanel');
+            const txTlB = document.getElementById('addTlBtn');
+            if (txTlP) txTlP.classList.remove('visible');
+            if (txTlB) txTlB.classList.remove('open');
+            startTextMode();
         }
     });
 
@@ -1671,6 +1963,15 @@ function initCustomPinchRotate() {
         if (!t.closest('#map')) return;
         if (t.closest('.pic-marker')) return;
         setActiveCar(null);
+    }, true);
+
+    // Нажатие вне редактируемого текстового поля фиксирует текст (сохраняет его)
+    // и выходит из режима текста
+    window.addEventListener('pointerdown', e => {
+        if (!textEditing) return;
+        const t = e.target;
+        if (t && t.closest && t.closest('.text-item')) return;
+        stopTextMode();
     }, true);
 
     const ROTATE_STEP = 5 * Math.PI / 180;
@@ -1977,6 +2278,7 @@ function initCustomPinchRotate() {
     document.getElementById('addPicBtn').addEventListener('click', () => {
         if (drawMode) stopDraw();
         if (eraserMode) stopEraser();
+        if (textMode) stopTextMode();
         const panel = document.getElementById('picPanel');
         panel.classList.toggle('visible');
         document.getElementById('addPicBtn').classList.toggle('open', panel.classList.contains('visible'));
@@ -1996,6 +2298,7 @@ function initCustomPinchRotate() {
     document.getElementById('addZnakBtn').addEventListener('click', () => {
         if (drawMode) stopDraw();
         if (eraserMode) stopEraser();
+        if (textMode) stopTextMode();
         const panel = document.getElementById('znakPanel');
         panel.classList.toggle('visible');
         document.getElementById('addZnakBtn').classList.toggle('open', panel.classList.contains('visible'));
@@ -2016,6 +2319,7 @@ function initCustomPinchRotate() {
     if (tlToggleBtn) tlToggleBtn.addEventListener('click', () => {
         if (drawMode) stopDraw();
         if (eraserMode) stopEraser();
+        if (textMode) stopTextMode();
         const panel = document.getElementById('tlPanel');
         panel.classList.toggle('visible');
         tlToggleBtn.classList.toggle('open', panel.classList.contains('visible'));
