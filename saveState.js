@@ -15,7 +15,7 @@
     window.sceneIoInit = true;
 
     const API_URL = 'https://functions.yandexcloud.net/d4eurq94s2t0svq2jpu4';
-    const BOT_LINK = 'https://t.me/E_ia_bot/pad2';
+    const BOT_LINK = 'https://t.me/E_ia_bot/pad';
 
     // Имя активной (загруженной на карту) сцены. null — активной сцены нет.
     let activeSceneName = null;
