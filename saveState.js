@@ -120,6 +120,30 @@
         setTimeout(() => el.remove(), 200);
     }
 
+    // ---- Растягивание шторки за заголовок (как у ПДД) ----
+    function attachSheetDrag(modal) {
+        const box = modal.querySelector('.scene-io-box');
+        const header = modal.querySelector('.scene-io-header');
+        if (!box || !header) return;
+        let drag = null;
+        header.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.scene-io-close') || e.target.closest('button')) return;
+            modal.classList.add('scene-io-dragging');
+            drag = { startY: e.clientY, startH: box.offsetHeight };
+            header.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        });
+        header.addEventListener('pointermove', (e) => {
+            if (!drag) return;
+            const h = drag.startH + (drag.startY - e.clientY);
+            const vh = window.innerHeight;
+            box.style.height = Math.min(vh, Math.max(vh * 0.12, h)) + 'px';
+        });
+        const endDrag = () => { drag = null; modal.classList.remove('scene-io-dragging'); };
+        header.addEventListener('pointerup', endDrag);
+        header.addEventListener('pointercancel', endDrag);
+    }
+
     // ---- Применение сцены на карту ----
     function applyScene(data, name) {
         const lines = Array.isArray(data.lines) ? data.lines : [];
@@ -232,9 +256,21 @@
         const box = document.createElement('div');
         box.className = 'scene-io-box';
 
+        const header = document.createElement('div');
+        header.className = 'scene-io-header';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'scene-io-close';
+        closeBtn.innerHTML = '&#10005;';
+        closeBtn.addEventListener('click', () => closeM(wrap));
+        const headerTitle = document.createElement('div');
+        headerTitle.className = 'scene-io-header-title';
+        headerTitle.textContent = 'Сохранить сцену';
+        header.appendChild(closeBtn);
+        header.appendChild(headerTitle);
+
         const title = document.createElement('div');
         title.className = 'scene-io-title';
-        title.textContent = 'Сохранить сцену';
+        title.textContent = 'Имя сцены';
 
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
@@ -255,6 +291,7 @@
         const status = document.createElement('div');
         status.className = 'scene-io-status';
 
+        box.appendChild(header);
         box.appendChild(title);
         box.appendChild(nameInput);
         box.appendChild(confirm);
@@ -263,6 +300,7 @@
         wrap.appendChild(box);
         wrap.addEventListener('click', e => { if (e.target === wrap) { closeM(wrap); } });
         document.body.appendChild(wrap);
+        attachSheetDrag(wrap);
         requestAnimationFrame(() => {
             wrap.classList.add('visible');
             nameInput.focus();
@@ -425,14 +463,22 @@
         const box = document.createElement('div');
         box.className = 'scene-io-box';
 
-        const title = document.createElement('div');
-        title.className = 'scene-io-title';
-        title.textContent = 'Сцены';
+        const header = document.createElement('div');
+        header.className = 'scene-io-header';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'scene-io-close';
+        closeBtn.innerHTML = '&#10005;';
+        closeBtn.addEventListener('click', closeManager);
+        const headerTitle = document.createElement('div');
+        headerTitle.className = 'scene-io-header-title';
+        headerTitle.textContent = 'Сцены';
+        header.appendChild(closeBtn);
+        header.appendChild(headerTitle);
 
         // Кнопка сохранения
         const saveBtn = document.createElement('button');
-        saveBtn.className = 'scene-io-opt';
-        saveBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить сцену</span>';
+        saveBtn.className = 'scene-io-opt scene-io-primary';
+        saveBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить текущую сцену</span>';
         saveBtn.addEventListener('click', saveActive);
 
         const listBody = document.createElement('div');
@@ -442,21 +488,15 @@
         status.className = 'scene-io-status busy';
         status.textContent = 'Загрузка списка…';
 
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'scene-io-cancel';
-        cancelBtn.textContent = 'Закрыть';
-        cancelBtn.addEventListener('click', closeManager);
-
-        box.appendChild(title);
-        box.appendChild(saveBtn);
+        box.appendChild(header);
         box.appendChild(listBody);
         box.appendChild(status);
-        box.appendChild(cancelBtn);
+        box.appendChild(saveBtn);
         modal.appendChild(box);
-        modal.addEventListener('click', e => { if (e.target === modal) closeManager(); });
         document.body.appendChild(modal);
         requestAnimationFrame(() => modal.classList.add('visible'));
         managerEl = modal;
+        attachSheetDrag(modal);
 
         (async () => {
             try {
@@ -658,40 +698,52 @@
 
         const css = document.createElement('style');
         css.textContent = '#saveBtn { bottom:calc(76px + env(safe-area-inset-bottom)); right:12px; }'
-            + '.scene-io-modal{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s;-webkit-tap-highlight-color:transparent;}'
+            + '@keyframes sceneIoSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}'
+            + '.scene-io-modal{position:fixed;inset:0;z-index:9500;background:transparent;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;padding:0;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s;-webkit-tap-highlight-color:transparent;}'
             + '.scene-io-modal.visible{opacity:1;visibility:visible;}'
-            + '.scene-io-box{width:100%;max-width:380px;background:rgba(24,24,24,0.98);border-radius:16px;border:0.5px solid rgba(255,255,255,0.12);padding:16px;display:flex;flex-direction:column;gap:8px;transform:scale(0.95);transition:transform .2s ease;max-height:85vh;overflow:hidden;}'
-            + '.scene-io-modal.visible .scene-io-box{transform:scale(1);}'
-            + '.scene-io-title{font-size:15px;font-weight:700;color:#fff;text-align:center;padding:6px 0 8px;}'
-            + '.scene-io-opt{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background .15s ease;}'
-            + '.scene-io-opt:active{background:rgba(255,255,255,0.12);transform:scale(0.98);}'
-            + '.scene-io-opt:disabled{opacity:0.6;}'
-            + '.scene-io-opt-icon{width:26px;height:26px;flex-shrink:0;}'
-            + '.scene-io-cancel{padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;width:100%;transition:background .15s ease;}'
+            + '.scene-io-box{pointer-events:auto;width:100%;max-width:100%;background:linear-gradient(180deg,rgba(30,30,30,0.98) 0%,rgba(18,18,18,1) 100%);border-radius:20px 20px 0 0;border-top:0.5px solid rgba(255,255,255,0.1);padding:0 0 env(safe-area-inset-bottom) 0;display:flex;flex-direction:column;gap:0;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,0.5);}'
+            + '.scene-io-modal.visible .scene-io-box{transform:translateY(0);}'
+            + '.scene-io-header{display:flex;align-items:center;gap:8px;padding:10px 10px 8px;border-bottom:0.5px solid rgba(255,255,255,0.1);flex-shrink:0;touch-action:none;user-select:none;-webkit-user-select:none;}'
+            + '.scene-io-header-title{font-size:16px;font-weight:700;flex:1;text-align:center;color:#fff;letter-spacing:-0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+            + '.scene-io-close{width:30px;height:30px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;flex-shrink:0;margin-left:auto;order:2;}'
+            + '.scene-io-header-title{order:1;}'
+            + '.scene-io-close:active{background:rgba(255,255,255,0.15);}'
+            + '.scene-io-title{font-size:17px;font-weight:700;color:#fff;text-align:center;padding:14px 16px 10px;letter-spacing:-0.3px;flex-shrink:0;}'
+            + '.scene-io-header{padding:10px 10px 8px;}'
+            + '.scene-io-opt{display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% - 32px);margin:0 16px;padding:15px;border:none;border-radius:14px;background:rgba(255,255,255,0.07);color:#fff;font-size:15px;font-weight:500;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:all .2s ease;letter-spacing:-0.2px;flex-shrink:0;}'
+            + '.scene-io-opt:active{background:rgba(255,255,255,0.14);transform:scale(0.98);}'
+            + '.scene-io-opt:disabled{opacity:0.5;}'
+            + '.scene-io-opt-icon{width:22px;height:22px;flex-shrink:0;}'
+            + '.scene-io-cancel{padding:14px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6);font-size:15px;font-weight:500;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;width:calc(100% - 32px);margin:0 16px;transition:all .2s ease;letter-spacing:-0.2px;flex-shrink:0;}'
             + '.scene-io-cancel:active{background:rgba(255,255,255,0.12);transform:scale(0.98);}'
-            + '.scene-io-input{width:100%;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#fff;font-size:16px;outline:none;margin-bottom:8px;user-select:text;-webkit-user-select:text;-webkit-tap-highlight-color:transparent;}'
-            + '.scene-io-input:focus{border-color:#30D158;}'
-            + '.scene-io-status{min-height:18px;font-size:13px;color:#8E8E93;text-align:center;padding:2px 0;}'
+            + '.scene-io-input{width:100%;padding:14px 16px;border-radius:14px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:#fff;font-size:16px;outline:none;margin:10px 0;user-select:text;-webkit-user-select:text;-webkit-tap-highlight-color:transparent;transition:border-color .2s ease;flex-shrink:0;}'
+            + '.scene-io-input:focus{border-color:rgba(48,209,88,0.6);background:rgba(255,255,255,0.08);}'
+            + '.scene-io-status{min-height:20px;font-size:13px;color:rgba(255,255,255,0.4);text-align:center;padding:4px 16px;flex-shrink:0;}'
             + '.scene-io-status.busy{color:#FFD60A;}'
             + '.scene-io-status.ok{color:#30D158;}'
-            + '.scene-io-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1 1 auto;min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;}'
+            + '.scene-io-list{display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1 1 auto;min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 16px;}'
             + '.scene-io-list::-webkit-scrollbar{display:none;}'
-            + '.scene-io-item{display:flex;flex-direction:column;gap:2px;padding:12px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;min-height:58px;transition:background .15s ease;}'
-            + '.scene-io-item:active{background:rgba(255,255,255,0.12);}'
-            + '.scene-io-item.active{background:rgba(48,209,88,0.15);border:0.5px solid rgba(48,209,88,0.6);}'
-            + '.scene-io-item.active:active{background:rgba(48,209,88,0.22);}'
+            + '.scene-io-item{display:flex;flex-direction:column;gap:2px;padding:14px 16px;border:none;border-radius:14px;background:rgba(255,255,255,0.05);color:#fff;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;min-height:56px;transition:all .2s ease;border:1px solid transparent;}'
+            + '.scene-io-item:active{background:rgba(255,255,255,0.1);}'
+            + '.scene-io-item.active{background:rgba(48,209,88,0.1);border-color:rgba(48,209,88,0.4);}'
+            + '.scene-io-item.active:active{background:rgba(48,209,88,0.18);}'
             + '.scene-io-item-main{display:flex;align-items:center;justify-content:space-between;gap:10px;}'
             + '.scene-io-item-left{flex:1;min-width:0;}'
-            + '.scene-io-item-name{font-size:15px;font-weight:600;word-break:break-all;}'
-            + '.scene-io-item-meta{font-size:12px;color:#8E8E93;margin-top:3px;}'
-            + '.scene-io-item.active .scene-io-item-meta{color:rgba(48,209,88,0.8);}'
-            + '.scene-io-item-btns{display:flex;gap:8px;flex-shrink:0;}'
-            + '.scene-io-item-btn{width:44px;height:44px;border:none;border-radius:10px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;padding:0;user-select:none;-webkit-user-select:none;transition:background .15s ease;}'
-            + '.scene-io-item-btn:active{background:rgba(255,255,255,0.2);transform:scale(0.92);}'
+            + '.scene-io-item-name{font-size:15px;font-weight:600;word-break:break-all;letter-spacing:-0.2px;}'
+            + '.scene-io-item-meta{font-size:12px;color:rgba(255,255,255,0.35);margin-top:3px;}'
+            + '.scene-io-item.active .scene-io-item-meta{color:rgba(48,209,88,0.7);}'
+            + '.scene-io-item-btns{display:flex;gap:6px;flex-shrink:0;}'
+            + '.scene-io-item-btn{width:40px;height:40px;border:none;border-radius:10px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;padding:0;user-select:none;-webkit-user-select:none;transition:all .15s ease;}'
+            + '.scene-io-item-btn:active{background:rgba(255,255,255,0.15);transform:scale(0.9);}'
             + '.scene-io-modal-save{z-index:9600;}'
-            + '.scene-io-confirm-msg{font-size:14px;color:#fff;text-align:center;padding:4px 8px 12px;line-height:1.4;user-select:none;-webkit-user-select:none;}'
-            + '.scene-io-opt.scene-io-danger{background:rgba(255,69,58,0.2);color:#FF453A;}'
-            + '.scene-io-opt.scene-io-danger:active{background:rgba(255,69,58,0.3);}';
+            + '.scene-io-modal.scene-io-dragging .scene-io-box{transition:none;}'
+            + '.scene-io-confirm-msg{font-size:15px;color:rgba(255,255,255,0.75);text-align:center;padding:14px 24px 16px;line-height:1.5;user-select:none;-webkit-user-select:none;}'
+            + '.scene-io-opt.scene-io-danger{background:rgba(255,69,58,0.15);color:#FF453A;}'
+            + '.scene-io-opt.scene-io-danger:active{background:rgba(255,69,58,0.25);}'
+            + '.scene-io-opt.scene-io-primary{background:rgba(48,209,88,0.9);color:#000;margin-top:12px;}'
+            + '.scene-io-opt.scene-io-primary:active{background:rgba(48,209,88,1);}'
+            + '.scene-io-opt.scene-io-primary:disabled{background:rgba(48,209,88,0.5);}'
+            + '.scene-io-opt.scene-io-primary .scene-io-opt-icon svg{fill:#000;}';
         document.head.appendChild(css);
     }
 
