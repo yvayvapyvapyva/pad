@@ -514,7 +514,7 @@
         if (managerEl) { managerEl.classList.add('visible'); return; }
 
         const modal = document.createElement('div');
-        modal.className = 'scene-io-modal';
+        modal.className = 'scene-io-modal scene-io-sheet';
         const box = document.createElement('div');
         box.className = 'scene-io-box';
 
@@ -549,6 +549,7 @@
         box.appendChild(saveBtn);
         modal.appendChild(box);
         document.body.appendChild(modal);
+        modal.addEventListener('click', e => { if (e.target === modal) closeManager(); });
         requestAnimationFrame(() => modal.classList.add('visible'));
         managerEl = modal;
         attachSheetDrag(modal);
@@ -659,6 +660,7 @@
             + '@keyframes sceneIoSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}'
             + '.scene-io-modal{position:fixed;inset:0;z-index:9500;background:transparent;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;padding:0;opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s;-webkit-tap-highlight-color:transparent;}'
             + '.scene-io-modal.visible{opacity:1;visibility:visible;}'
+            + '.scene-io-modal.scene-io-sheet{pointer-events:auto;}'
             + '.scene-io-box{pointer-events:auto;width:100%;max-width:100%;background:linear-gradient(180deg,rgba(30,30,30,0.98) 0%,rgba(18,18,18,1) 100%);border-radius:20px 20px 0 0;border-top:0.5px solid rgba(255,255,255,0.1);padding:0 0 env(safe-area-inset-bottom) 0;display:flex;flex-direction:column;gap:0;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,0.5);}'
             + '.scene-io-modal.visible .scene-io-box{transform:translateY(0);}'
             + '.scene-io-modal.scene-io-center{background:rgba(0,0,0,0.6);pointer-events:auto;display:flex;align-items:center;justify-content:center;padding:24px;}'
