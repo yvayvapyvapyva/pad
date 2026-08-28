@@ -4,10 +4,9 @@
 // дублировать логику сериализации линий, объектов и записанных движений машинок.
 //
 // Кнопка сразу открывает менеджер со списком всех сцен пользователя. Из него:
-//   - Сохранить        — перезаписывает текущую активную сцену (если она загружена),
-//                         либо создаёт новую после ввода имени;
-//   - Сохранить как…   — всегда создаёт новую / перезаписывает после ввода имени;
-//   - Загрузить (иконка) — применяет выбранную сцену на карту и делает её активной;
+//   - Сохранить   — открывает окно с именем: если ввести существующее имя,
+//                   сцена перезаписывается, новое имя — создаётся новая сцена;
+//   - Клик по строке сцены — применяет сцену на карту и делает её активной;
 //   - Переименовать (иконка) — меняет имя сцены;
 //   - Удалить (иконка)       — удаляет сцену.
 
@@ -242,20 +241,6 @@
         });
     }
 
-    function saveAs() {
-        saveWithName({
-            prefill: defaultName(),
-            callback: (name) => {
-                activeSceneName = name;
-                if (managerEl) {
-                    const rows = managerEl.querySelectorAll('.scene-io-item');
-                    rows.forEach(r => r.classList.toggle('active', r.querySelector('.scene-io-item-name').textContent === name));
-                    refreshManager();
-                }
-            }
-        });
-    }
-
     // ---- Простой prompt-модалка (для переименования) ----
     function promptBox({ title, label, value, placeholder, okText, onSubmit }) {
         const wrap = document.createElement('div');
@@ -375,22 +360,11 @@
         title.className = 'scene-io-title';
         title.textContent = 'Сцены';
 
-        // Верхние кнопки действий
-        const actions = document.createElement('div');
-        actions.className = 'scene-io-actions';
-
+        // Кнопка сохранения
         const saveBtn = document.createElement('button');
         saveBtn.className = 'scene-io-opt';
-        saveBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить</span>';
+        saveBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить сцену</span>';
         saveBtn.addEventListener('click', saveActive);
-
-        const saveAsBtn = document.createElement('button');
-        saveAsBtn.className = 'scene-io-opt';
-        saveAsBtn.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M20 11H4v2h16v-2z"/></svg></span><span>Сохранить как…</span>';
-        saveAsBtn.addEventListener('click', saveAs);
-
-        actions.appendChild(saveBtn);
-        actions.appendChild(saveAsBtn);
 
         const listBody = document.createElement('div');
         listBody.className = 'scene-io-list';
@@ -405,7 +379,7 @@
         cancelBtn.addEventListener('click', closeManager);
 
         box.appendChild(title);
-        box.appendChild(actions);
+        box.appendChild(saveBtn);
         box.appendChild(listBody);
         box.appendChild(status);
         box.appendChild(cancelBtn);
@@ -435,6 +409,7 @@
         function buildSceneRow(scene, statusEl, listEl) {
             const row = document.createElement('div');
             row.className = 'scene-io-item' + (activeSceneName === scene.name ? ' active' : '');
+            row.addEventListener('click', () => loadScene(scene, statusEl));
 
             const main = document.createElement('div');
             main.className = 'scene-io-item-main';
@@ -467,9 +442,6 @@
                 return b;
             };
 
-            const loadBtn = mkBtn('Загрузить',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#30D158"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg>',
-                () => loadScene(scene, statusEl));
             const renameBtn = mkBtn('Переименовать',
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
                 () => renameScene(scene, statusEl));
@@ -477,7 +449,6 @@
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FF453A"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM8 9h8v10H8V9zm.5-5l1-1h5l1 1H20v2H4V4h4.5z"/></svg>',
                 () => deleteScene(scene, statusEl));
 
-            btns.appendChild(loadBtn);
             btns.appendChild(renameBtn);
             btns.appendChild(delBtn);
             main.appendChild(btns);
@@ -558,6 +529,7 @@
         function buildRow(scene) {
             const row = document.createElement('div');
             row.className = 'scene-io-item' + (activeSceneName === scene.name ? ' active' : '');
+            row.addEventListener('click', () => loadScene(scene, status));
             const main = document.createElement('div');
             main.className = 'scene-io-item-main';
             const left = document.createElement('div');
@@ -585,9 +557,6 @@
                 b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
                 return b;
             };
-            btns.appendChild(mkBtn('Загрузить',
-                '<svg viewBox="0 0 24 24" width="18" height="18" fill="#30D158"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg>',
-                () => loadScene(scene, status)));
             btns.appendChild(mkBtn('Переименовать',
                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="#FFD60A"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
                 () => renameScene(scene, status)));
@@ -629,8 +598,6 @@
             + '.scene-io-status{min-height:18px;font-size:13px;color:#8E8E93;text-align:center;padding:2px 0;}'
             + '.scene-io-status.busy{color:#FFD60A;}'
             + '.scene-io-status.ok{color:#30D158;}'
-            + '.scene-io-actions{display:flex;gap:8px;}'
-            + '.scene-io-actions .scene-io-opt{flex:1;}'
             + '.scene-io-list{display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:50vh;}'
             + '.scene-io-item{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:none;border-radius:12px;background:rgba(255,255,255,0.06);color:#fff;}'
             + '.scene-io-item.active{background:rgba(48,209,88,0.15);border:0.5px solid rgba(48,209,88,0.6);}'
