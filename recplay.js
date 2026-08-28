@@ -315,6 +315,9 @@
     }
 
     // ---- Запись ----
+    // Частота сэмплов: ~10 кадров/с (100 мс), чтобы уменьшить размер записи.
+    // Воспроизведение интерполирует между сэмплами линейно, поэтому плавность не страдает.
+    const SAMPLE_INTERVAL_MS = 100;
     function recFrame() {
         if (!_recOn) { _recRaf = null; return; }
         const now = performance.now();
@@ -329,7 +332,10 @@
             } else {
                 t = now - _recStart;
             }
-            m._samples.push({ t: Math.round(t), lat: m._lat, lon: m._lon, heading: m._heading });
+            if (m._lastSampleT == null || t - m._lastSampleT >= SAMPLE_INTERVAL_MS) {
+                m._samples.push({ t: Math.round(t), lat: m._lat, lon: m._lon, heading: m._heading });
+                m._lastSampleT = t;
+            }
         });
         _recRaf = requestAnimationFrame(recFrame);
     }
@@ -417,7 +423,7 @@
         if (_recOn) {
             stopRec();
         } else {
-            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; });
+            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; });
             _recOn = true;
             _recStart = performance.now();
             // Поворотники, уже включённые до старта записи, пишем с начала сессии
@@ -447,10 +453,12 @@
             marker._lastRel = 0;
             if (_playAll) {
                 marker._phaseOffset = (performance.now() - _masterStart) % _maxDur;
+                marker._lastSampleT = 0;
                 marker._samples.push({ t: 0, lat: marker._lat, lon: marker._lon, heading: marker._heading });
             } else {
                 marker._phaseOffset = 0;
-                marker._samples.push({ t: performance.now() - _recStart, lat: marker._lat, lon: marker._lon, heading: marker._heading });
+                marker._lastSampleT = performance.now() - _recStart;
+                marker._samples.push({ t: marker._lastSampleT, lat: marker._lat, lon: marker._lon, heading: marker._heading });
             }
         }
     }, true);
