@@ -36,11 +36,15 @@
     }
 
     // Telegram-контекст: user_id и init_data (подписанные данные для проверки на сервере)
+    // ID по умолчанию для работы вне Telegram (делёжка/обычный запуск).
+    const DEFAULT_USER_ID = 'default';
+
     function tgCreds() {
         const wa = window.Telegram && window.Telegram.WebApp;
         const user = wa && wa.initDataUnsafe && wa.initDataUnsafe.user;
         return {
-            user_id: user ? String(user.id) : '',
+            // Вне Telegram берём дефолтный ID, чтобы сцены можно было сохранять
+            user_id: user ? String(user.id) : DEFAULT_USER_ID,
             init_data: wa ? (wa.initData || '') : ''
         };
     }
