@@ -269,7 +269,7 @@
     // ---- Нативное меню «Поделиться» в Telegram ----
     function shareSceneLink(ownerUserId, sceneName) {
         const link = window.makeShareLink(ownerUserId, sceneName);
-        const text = '«' + sceneName + '» — сцена в Pad';
+        const text = '«' + sceneName + '» на доске дорожных ситуаций';
         const shareUrl = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
         const wa = window.Telegram && window.Telegram.WebApp;
         if (wa && typeof wa.openTelegramLink === 'function') {
