@@ -28,36 +28,19 @@ import hmac
 import json
 import os
 import urllib.parse
-import urllib.request
 
 import ydb
-import ydb.credentials
+import ydb.iam
 
 
 def _scene_path() -> str:
     return os.environ["YDB_DATABASE"].rstrip("/") + "/scene"
 
 
-def _get_sa_token() -> dict:
-    """Получаем IAM-токен сервисного аккаунта функции из внутреннего сервиса метаданных."""
-    url = ("http://169.254.169.254/computeMetadata/v1/instance/"
-           "service-accounts/default/token")
-    req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
-class _IAMCredentials(ydb.credentials.AbstractExpiringTokenCredentials):
-    """Динамические IAM-креды сервисного аккаунта (токен кэшируется и обновляется)."""
-
-    def _make_token_request(self):
-        return _get_sa_token()
-
-
 def _driver() -> ydb.DriverConfig:
     endpoint = os.environ["YDB_ENDPOINT"]
     database = os.environ["YDB_DATABASE"]
-    return ydb.DriverConfig(endpoint, database, credentials=_IAMCredentials())
+    return ydb.DriverConfig(endpoint, database, credentials=ydb.iam.MetadataUrlCredentials())
 
 
 def _ensure_table(session: ydb.Session) -> None:
