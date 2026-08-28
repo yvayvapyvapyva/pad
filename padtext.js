@@ -139,6 +139,7 @@ function buildTextItem(lat, lon, text, collapsed) {
     ta.textContent = text || '';
     const marker = makeTextMarker(lat, lon, ta);
     marker._fixed = true;
+    marker.update({ draggable: true });
     marker._select.classList.add('fixed');
     positionTextMarker(marker);
     resizeTa(marker);
