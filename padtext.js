@@ -139,7 +139,7 @@ function buildTextItem(lat, lon, text, collapsed) {
     ta.textContent = text || '';
     const marker = makeTextMarker(lat, lon, ta);
     marker._fixed = true;
-    ta.classList.add('fixed');
+    marker._select.classList.add('fixed');
     positionTextMarker(marker);
     resizeTa(marker);
     if (collapsed) marker._select.classList.add('collapsed');
@@ -268,7 +268,7 @@ function commitTextEditing() {
     marker.update({ draggable: true });
     ta.setAttribute('contenteditable', 'false');
     ta.classList.remove('empty');
-    ta.classList.add('fixed');
+    marker._select.classList.add('fixed');
     positionTextMarker(marker);
     commit();
 }
