@@ -1112,7 +1112,7 @@
                 waitStart.style.width = p1 + '%';
                 waitEnd.style.left = Math.min(100, p2) + '%';
                 waitEnd.style.width = Math.max(0, 100 - p2) + '%';
-                scrubTime.textContent = fmtTime(st) + '–' + fmtTime(et) + ' (' + fmtTime(et - st) + ')';
+                scrubTime.textContent = fmtTime(ph + st) + '–' + fmtTime(ph + et) + ' (' + fmtTime(et - st) + ')';
             };
             scrubTo(marker, marker._startTrim);
             refresh();
