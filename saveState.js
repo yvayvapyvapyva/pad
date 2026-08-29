@@ -16,9 +16,17 @@
 
     const API_URL = 'https://functions.yandexcloud.net/d4eurq94s2t0svq2jpu4';
     const BOT_LINK = 'https://t.me/E_ia_bot/pad';
+    // Длительность анимации перелёта к камере сохранённой сцены.
+    // Мгновенный прыжок camera при холодном кеше спутниковых тайлов даёт
+    // рассинхрон растра и слоя элементов на iOS — перелёт это устраняет.
+    const SCENE_FLY_MS = 500;
 
     // Имя активной (загруженной на карту) сцены. null — активной сцены нет.
     let activeSceneName = null;
+
+    // Таймер защитного «poke» камеры после перелёта к камере сцены
+    // (см. pokeCamera ниже). Сбрасывается при повторных загрузках.
+    let scenePokeTimer = null;
 
     // Кэш списка сцен. Загружается при запуске приложения и обновляется
     // после сохранения, переименования или удаления сцен.
@@ -164,6 +172,18 @@
     }
 
     // ---- Применение сцены на карту ----
+    // Защита от рассинхрона растрового слоя после перелёта: эпсилон-изменение zoom
+    // заставляет WebGL-слой растра гарантированно переотрисовать кадр на финальном
+    // LOD (закрывает iOS-случай «застрявшего» кадра после смены камеры).
+    function pokeCamera() {
+        try {
+            if (!map || !map.zoom || !map.center) return;
+            const exact = { center: [map.center[0], map.center[1]], zoom: map.zoom, duration: 0 };
+            map.update({ location: { center: exact.center, zoom: exact.zoom + 0.0001, duration: 0 } });
+            map.update({ location: exact });
+        } catch (e) {}
+    }
+
     function applyScene(data, name) {
         const lines = Array.isArray(data.lines) ? data.lines : [];
         const markers = Array.isArray(data.markers) ? data.markers : [];
@@ -200,17 +220,13 @@
             try {
                 const hasCenter = Array.isArray(data.camera.center) && data.camera.center.length >= 2 && data.camera.zoom != null;
                 const hasAz = data.camera.azimuth != null;
-                if (hasCenter && hasAz) {
+                if (hasCenter || hasAz) {
                     map.update({
-                        location: { center: [data.camera.center[0], data.camera.center[1]], zoom: data.camera.zoom, duration: 0 },
-                        camera: { azimuth: data.camera.azimuth, duration: 0 }
+                        location: hasCenter ? { center: [data.camera.center[0], data.camera.center[1]], zoom: data.camera.zoom, duration: SCENE_FLY_MS } : undefined,
+                        camera: hasAz ? { azimuth: data.camera.azimuth, duration: SCENE_FLY_MS } : undefined
                     });
-                } else if (hasCenter) {
-                    map.update({ location: { center: [data.camera.center[0], data.camera.center[1]], zoom: data.camera.zoom, duration: 0 } });
-                } else if (hasAz && map.setCamera) {
-                    map.setCamera({ azimuth: data.camera.azimuth, duration: 0 });
-                } else if (hasAz) {
-                    map.update({ camera: { azimuth: data.camera.azimuth, duration: 0 } });
+                    clearTimeout(scenePokeTimer);
+                    scenePokeTimer = setTimeout(pokeCamera, SCENE_FLY_MS + 150);
                 }
             } catch (e) {}
         }
