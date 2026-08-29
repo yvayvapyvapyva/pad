@@ -202,7 +202,8 @@
             lines: lines.map(l => ({
                 coords: Array.isArray(l.coords) ? l.coords.map(c => (Array.isArray(c) ? c.slice() : c)) : [],
                 color: l.color || '#000000',
-                width: l.width || 5
+                width: l.width || 5,
+                widthM: l.widthM || null
             })),
             texts: (Array.isArray(data.texts) ? data.texts : []).map(t => ({
                 lat: t.lat,
