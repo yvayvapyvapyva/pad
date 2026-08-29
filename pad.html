@@ -862,7 +862,7 @@ function unpackRecSamples(arr) {
 function serializeScene() {
     if (textEditing) commitTextEditing();
     return {
-        lines: drawnLines.map(l => ({ coords: l.coords.map(c => c.slice()), color: l.color || '#000000', width: l.width || 5 })),
+        lines: drawnLines.map(l => ({ coords: l.coords.map(c => c.slice()), color: l.color || '#000000', width: l.width || 5, widthM: l.widthM || null })),
         texts: textItems.map(m => ({ lat: m._lat, lon: m._lon, text: m._ta ? m._ta.textContent || '' : '', collapsed: !!(m._select && m._select.classList.contains('collapsed')) })),
         markers: placedMarkers.map(m => ({
             kind: m._isTl ? 'tl' : (m._isZnak ? 'znak' : 'pic'),
@@ -889,12 +889,21 @@ function restoreScene(snap) {
     drawnLines.forEach(l => { if (l.feature) map.removeChild(l.feature); });
     drawnLines = [];
     snap.lines.forEach(l => {
+        const color = l.color || '#000000';
+        let width = l.width || 5;
+        let widthM = null;
+        if (l.widthM) {
+            widthM = l.widthM;
+            const wLat = l.coords && l.coords[0] ? l.coords[0][1] : map.center[1];
+            const mpp = metersPerPixel(wLat);
+            if (mpp > 0) width = Math.max(1, widthM / mpp);
+        }
         const feature = new ymaps3.YMapFeature({
             geometry: { type: 'LineString', coordinates: l.coords },
-            style: { stroke: [{ width: l.width, color: hexToRgba(l.color, 0.7) }] }
+            style: { stroke: [{ width: width, color: hexToRgba(color, 0.7) }] }
         });
         map.addChild(feature);
-        drawnLines.push({ feature, coords: l.coords, color: l.color, width: l.width });
+        drawnLines.push({ feature, coords: l.coords, color: color, width: width, widthM: widthM });
     });
     snap.markers.forEach(d => {
         let m;
@@ -1507,6 +1516,15 @@ function updateAllPicMarkers(event) {
         // zoom изменился — пересчитываем размер всех маркеров
         _lastZoomForSize = zoom;
         placedMarkers.forEach(updatePicSize);
+        // и толщину линий, нарисованных в «метровом» режиме (widthM).
+        // Старые линии без widthM остаются фиксированной пиксельной толщины.
+        if (drawnLines.some(l => l.widthM)) {
+            const mpp = metersPerPixel(map.center[1]);
+            drawnLines.forEach(l => {
+                if (!l.widthM) return;
+                l.feature.update({ style: { stroke: [{ width: Math.max(1, l.widthM / mpp), color: hexToRgba(l.color, 0.7) }] } });
+            });
+        }
     } else {
         // zoom не менялся (перемещение/поворот) — только поворот, без пересчёта размера
         placedMarkers.forEach(updatePicTransform);
@@ -1610,7 +1628,8 @@ function initCustomPinchRotate() {
         },
         onPointerUp: () => {
             if (drawing && drawFeature) {
-                drawnLines.push({ feature: drawFeature, coords: lineCoords.slice(), color: drawColor, width: drawWidth });
+                const wLat = lineCoords[0] ? lineCoords[0][1] : map.center[1];
+                drawnLines.push({ feature: drawFeature, coords: lineCoords.slice(), color: drawColor, width: drawWidth, widthM: drawWidth * metersPerPixel(wLat) });
                 commit();
             }
             if (eraserMode && eraserDrag) commit();
@@ -1623,7 +1642,8 @@ function initCustomPinchRotate() {
         },
         onPointerCancel: () => {
             if (drawing && drawFeature) {
-                drawnLines.push({ feature: drawFeature, coords: lineCoords.slice(), color: drawColor, width: drawWidth });
+                const wLat = lineCoords[0] ? lineCoords[0][1] : map.center[1];
+                drawnLines.push({ feature: drawFeature, coords: lineCoords.slice(), color: drawColor, width: drawWidth, widthM: drawWidth * metersPerPixel(wLat) });
                 commit();
             }
             if (eraserMode && eraserDrag) commit();
