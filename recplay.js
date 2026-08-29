@@ -48,16 +48,21 @@
             transition:transform .3s ease, visibility .3s;
         }
         #scrubModal.visible { transform:translateY(0); visibility:visible; }
-        #scrubModal.scrub-dragging { transition:none; }
         .scrub-header {
             display:flex; align-items:center; gap:8px;
             padding:8px 10px; border-bottom:0.5px solid rgba(255,255,255,0.12); flex-shrink:0;
+            position:relative;
         }
-        #scrubTitle { font-size:15px; font-weight:600; flex:1; text-align:center; }
+        .scrub-row .scrub-timewrap { flex:0 0 100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:4px 0 6px; }
+        .scrub-title {
+            position:absolute; left:0; right:0; text-align:center; pointer-events:none;
+            font-size:13px; font-weight:600; color:rgba(255,255,255,0.9);
+        }
         .scrub-close {
             width:30px; height:30px; border-radius:50%; border:0.5px solid rgba(255,255,255,0.12);
             background:rgba(255,255,255,0.06); color:#fff; font-size:15px; cursor:pointer;
             display:flex; align-items:center; justify-content:center; touch-action:manipulation; flex-shrink:0;
+            margin-left:auto; /* всегда прижимаем к правому краю шапки */
         }
         .scrub-close:active { background:rgba(255,255,255,0.15); }
         #scrubBody { flex:1; min-height:0; overflow-y:auto; padding:10px 12px 32px; -webkit-overflow-scrolling:touch; }
@@ -66,25 +71,9 @@
             border-bottom:0.5px solid rgba(255,255,255,0.08);
         }
         .scrub-thumb {
-            width:36px; height:36px; object-fit:contain; flex-shrink:0; pointer-events:none;
+            width:26px; height:26px; object-fit:contain; flex-shrink:0; pointer-events:none;
+            border-radius:6px; background:rgba(255,255,255,0.08); padding:2px;
         }
-        .scrub-id {
-            display:flex; align-items:center; justify-content:center; flex-shrink:0;
-            width:24px; height:24px; border-radius:50%;
-            background:rgba(0,0,0,0.6); border:1px solid #FFD60A; color:#FFD60A;
-            font-size:12px; font-weight:700; line-height:1;
-        }
-        .scrub-row.row-hl {
-            background:rgba(255,214,10,0.14); border:1px solid rgba(255,214,10,0.5);
-            border-radius:12px; padding:9px 7px;
-        }
-        .scrub-del-btn {
-            width:26px; height:26px; border-radius:50%; flex-shrink:0;
-            background:rgba(255,69,58,0.9); border:0.5px solid rgba(255,255,255,0.2);
-            color:#fff; font-size:14px; line-height:1;
-            display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:manipulation;
-        }
-        .scrub-del-btn:active { background:rgba(255,69,58,1); }
         #scrubConfirm {
             position:fixed; inset:0; z-index:9300; display:flex; align-items:center; justify-content:center;
             background:rgba(0,0,0,0.45); opacity:0; visibility:hidden; transition:opacity .2s ease, visibility .2s;
@@ -103,34 +92,25 @@
         }
         .scrub-confirm-btns .scrub-confirm-btn:active { background:rgba(255,255,255,0.15); }
         .scrub-confirm-btns .scrub-confirm-yes { background:rgba(255,69,58,0.9); border-color:transparent; }
-        .scrub-time { flex-shrink:0; width:64px; font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; }
-        .scrub-dual { position:relative; flex:1; min-width:0; height:22px; touch-action:manipulation; }
-        .scrub-dual::before {
-            content:''; position:absolute; left:0; right:0; top:50%; height:5px; transform:translateY(-50%);
-            border-radius:3px; background:rgba(255,255,255,0.18);
-        }
+        .scrub-time { flex-shrink:0; font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; }
+        /* Полоса времени в стиле полос поворотников: зелёный отрезок во всю высоту трека */
+        .scrub-timetrack { cursor:ew-resize; }
+        /* Полоса времени занимает всю ширину строки, как секция поворотников */
+        .scrub-timeline { flex:0 0 100%; }
         .scrub-active {
-            position:absolute; top:50%; height:5px; transform:translateY(-50%);
-            background:#30D158; border-radius:3px; pointer-events:none;
+            position:absolute; top:2px; bottom:2px; border-radius:4px;
+            background:#30D158; opacity:0.9; pointer-events:none;
         }
-        .scrub-dual .scrub-range {
-            position:absolute; inset:0; width:100%; margin:0; flex:none;
-            -webkit-appearance:none; appearance:none; background:transparent; pointer-events:none;
-        }
-        .scrub-dual .scrub-range::-webkit-slider-runnable-track { background:transparent; height:5px; }
-        .scrub-dual .scrub-range::-webkit-slider-thumb {
-            -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%;
-            border:none; margin-top:-5.5px; box-shadow:0 2px 6px rgba(0,0,0,0.5); pointer-events:auto;
-        }
-        .scrub-start::-webkit-slider-thumb { background:#FF453A; }
-        .scrub-end::-webkit-slider-thumb { background:#FFD60A; }
-        .scrub-dual .scrub-range::-moz-range-track { background:transparent; height:5px; }
-        .scrub-dual .scrub-range::-moz-range-thumb {
-            pointer-events:auto; width:16px; height:16px; border:none; border-radius:50%; box-shadow:0 2px 6px rgba(0,0,0,0.5);
-        }
-        .scrub-start::-moz-range-thumb { background:#FF453A; }
-        .scrub-end::-moz-range-thumb { background:#FFD60A; }
         .scrub-empty { padding:24px 12px; font-size:15px; color:rgba(255,255,255,0.55); text-align:center; }
+        /* Красная кнопка удаления записи внизу шторки */
+        #scrubFooter { padding:8px 12px; flex-shrink:0; }
+        #scrubDeleteBtn {
+            width:100%; height:44px; border-radius:12px; border:none; flex-shrink:0;
+            background:rgba(255,69,58,0.9); color:#fff; font-size:16px; font-weight:600;
+            display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:manipulation;
+        }
+        #scrubDeleteBtn:active { background:rgba(255,69,58,1); }
+        #scrubDeleteBtn.hidden { display:none; }
         /* Круглая REC-кнопка над машинкой (появляется по длительному нажатию, если есть запись) */
         .rec-btn {
             position:absolute; top:-26px; left:50%; transform:translate(-50%,-50%);
@@ -145,26 +125,18 @@
         .rec-btn:active { transform:translate(-50%,-50%) scale(0.9); }
         .rec-btn .rec-dot { width:8px; height:8px; border-radius:50%; background:#fff; flex-shrink:0; }
         .scrub-row { flex-wrap:wrap; }
-        .scrub-arrow {
-            width:22px; height:22px; border-radius:50%; flex-shrink:0;
-            background:rgba(255,255,255,0.1); border:0.5px solid rgba(255,255,255,0.15);
-            color:rgba(255,255,255,0.8); font-size:11px; line-height:1;
-            display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:manipulation;
-            transition:transform .2s ease;
-        }
-        .scrub-arrow.open { transform:rotate(180deg); background:rgba(255,204,0,0.22); border-color:#FFCC00; color:#FFCC00; }
-        .scrub-sigsec { flex:0 0 100%; display:none; padding-top:6px; }
-        .scrub-sigsec.open { display:block; }
+        /* Линии поворотников всегда раскрыты */
+        .scrub-sigsec { flex:0 0 100%; display:block; padding-top:6px; }
         .scrub-sigline { display:flex; align-items:center; gap:6px; padding:3px 0; }
         .scrub-siglabel { flex-shrink:0; width:16px; text-align:center; font-size:14px; color:#FFCC00; }
-        .scrub-siglabel.right { color:#0A84FF; }
+        .scrub-siglabel.right { color:#FFCC00; }
         .scrub-sigtrack {
             position:relative; flex:1; min-width:0; height:26px; border-radius:6px;
             background:rgba(255,255,255,0.08); cursor:crosshair; touch-action:none; overflow:hidden;
         }
         .sig-seg { position:absolute; top:2px; bottom:2px; border-radius:4px; opacity:0.9; touch-action:none; }
         .sig-seg.sig-seg-left { background:#FFCC00; }
-        .sig-seg.sig-seg-right { background:#0A84FF; }
+        .sig-seg.sig-seg-right { background:#FFCC00; }
         .sig-seg.sig-draw { opacity:0.45; }
         .sig-h {
             position:absolute; top:0; bottom:0; width:10px; background:rgba(255,255,255,0.9);
@@ -203,28 +175,40 @@
     let _masterStart = 0;
     let _maxDur = 1;
     let _scrubOpen = false;
-    let _scrubTimer = null;
-    let _suppressClick = false;
     let _confirmMarker = null;
-    let _hlMarker = null;    // выделенная машинка (панель записей открыта)
-    let _scrubOnly = null;   // панель открыта только для одной машинки
+    let _scrubMarker = null; // машинка, для которой открыта панель записи
 
     const scrubModal = document.createElement('div');
     scrubModal.id = 'scrubModal';
     const scrubHeader = document.createElement('div');
     scrubHeader.className = 'scrub-header';
-    const scrubTitle = document.createElement('div');
-    scrubTitle.id = 'scrubTitle';
-    scrubTitle.textContent = 'Записи';
     const scrubClose = document.createElement('div');
     scrubClose.className = 'scrub-close';
     scrubClose.textContent = '✕';
+    // Заголовок «Запись» + иконка машинки слева от времени в теле шторки
+    const scrubTitle = document.createElement('div');
+    scrubTitle.className = 'scrub-title';
+    scrubTitle.textContent = 'Запись';
+    const scrubThumb = document.createElement('img');
+    scrubThumb.className = 'scrub-thumb';
+    const scrubTime = document.createElement('div');
+    scrubTime.className = 'scrub-time';
     scrubHeader.appendChild(scrubTitle);
     scrubHeader.appendChild(scrubClose);
+    scrubThumb.style.display = 'none';
     const scrubBody = document.createElement('div');
     scrubBody.id = 'scrubBody';
+    const scrubFooter = document.createElement('div');
+    scrubFooter.id = 'scrubFooter';
+    const scrubDeleteBtn = document.createElement('div');
+    scrubDeleteBtn.id = 'scrubDeleteBtn';
+    scrubDeleteBtn.textContent = 'Удалить запись';
+    scrubDeleteBtn.classList.add('hidden');
+    scrubDeleteBtn.addEventListener('click', () => { if (_scrubMarker) showConfirm(_scrubMarker); });
+    scrubFooter.appendChild(scrubDeleteBtn);
     scrubModal.appendChild(scrubHeader);
     scrubModal.appendChild(scrubBody);
+    scrubModal.appendChild(scrubFooter);
     document.body.appendChild(scrubModal);
     const confirmModal = document.createElement('div');
     confirmModal.id = 'scrubConfirm';
@@ -388,20 +372,26 @@
     // Частота сэмплов: ~10 кадров/с (100 мс), чтобы уменьшить размер записи.
     // Воспроизведение интерполирует между сэмплами линейно, поэтому плавность не страдает.
     const SAMPLE_INTERVAL_MS = 100;
+    // Текущее время записи на шкале машинки. При записи во время воспроизведения это
+    // фаза мастер-цикла, сдвинутая на _phaseOffset (с развёрткой через границу цикла);
+    // при обычной записи — секунды от начала сессии. Единая шкала для сэмплов движения
+    // и поворотников, чтобы они всегда попадали точно в свои места.
+    function relTime(marker) {
+        if (_playAll) {
+            const phase = (performance.now() - _masterStart) % _maxDur;
+            let t = phase - (marker._phaseOffset || 0);
+            if (marker._lastRel != null && t < marker._lastRel) t += _maxDur;
+            marker._lastRel = t;
+            return t;
+        }
+        return performance.now() - _recStart;
+    }
+
     function recFrame() {
         if (!_recOn) { _recRaf = null; return; }
-        const now = performance.now();
         placedMarkers.forEach(m => {
             if (!m._recActive || m._isTl) return; // светофоры не сэмплируются по движению
-            let t;
-            if (_playAll) {
-                const phase = (now - _masterStart) % _maxDur;
-                t = phase - (m._phaseOffset || 0);
-                if (t < m._lastRel) t += _maxDur; // развёртка через границу цикла
-                m._lastRel = t;
-            } else {
-                t = now - _recStart;
-            }
+            const t = relTime(m);
             if (m._lastSampleT == null || t - m._lastSampleT >= SAMPLE_INTERVAL_MS) {
                 m._samples.push({ t: Math.round(t), lat: m._lat, lon: m._lon, heading: m._heading });
                 m._lastSampleT = t;
@@ -415,13 +405,7 @@
     // записывается в marker._signals как отрезки {t0, t1, side} — так же,
     // как их рисуют вручную в редакторе перемотки.
     function recSignalTime(marker) {
-        if (_playAll) {
-            const phase = (performance.now() - _masterStart) % _maxDur;
-            let t = phase - (marker._phaseOffset || 0);
-            if (t < 0) t += _maxDur;
-            return t;
-        }
-        return performance.now() - _recStart;
+        return relTime(marker);
     }
 
     function closeRecSig(marker, side, tEnd) {
@@ -435,7 +419,10 @@
     }
 
     function recordSignalChange(marker) {
-        if (!_recOn || !marker || marker._isTl) return;
+        // Поворотники пишем только у машинок, реально записываемых в этой сессии
+        // (тронуты после старта REC). У остальных — например, проигрывающихся —
+        // состояние сигнала не должно попадать в чужую запись.
+        if (!_recOn || !marker || marker._isTl || !marker._recActive) return;
         const L = marker._blinkSide === 'left' || marker._blinkSide === 'both';
         const R = marker._blinkSide === 'right' || marker._blinkSide === 'both';
         const t = Math.max(0, recSignalTime(marker));
@@ -488,14 +475,17 @@
         _recOn = false;
         if (_recRaf) cancelAnimationFrame(_recRaf);
         _recRaf = null;
-        const tEnd = _playAll ? _maxDur : (performance.now() - _recStart);
         placedMarkers.forEach(m => {
+            if (!m._recActive) { m._prevSamples = undefined; return; }
+            // Конец на собственной шкале машинки (а не _maxDur/времени сессии):
+            // при записи во время воспроизведения шкала сдвинута на _phaseOffset.
+            const tEnd = Math.round(relTime(m));
             closeAllRecSigs(m, tEnd);
             if (m._prevSamples && !hasMovement(m)) {
                 m._samples = m._prevSamples; // тронули, но не сдвинули — вернуть старую запись
-            } else if (m._recActive && hasMovement(m)) {
+            } else if (hasMovement(m)) {
                 // Финальная точка с текущим положением — чтобы endTrim/последний t были точными
-                m._samples.push({ t: Math.round(tEnd), lat: m._lat, lon: m._lon, heading: m._heading });
+                m._samples.push({ t: tEnd, lat: m._lat, lon: m._lon, heading: m._heading });
                 m._startTrim = 0;      // свежая запись — диапазон целиком
                 m._endTrim = undefined;
             }
@@ -510,26 +500,13 @@
         if (_recOn) {
             stopRec();
         } else {
-            placedMarkers.forEach(m => {
-                m._recActive = false;
-                m._prevSamples = undefined;
-                m._lastRel = 0;
-                m._lastSampleT = undefined;
-                // Новая сессия записи: поворотники начинаются с нуля. Если не сбрасывать,
-                // при повторной записи той же машинки старые отрезки сигналов остаются
-                // в _signals и накладываются на новые в панели записей (таймлайны съезжают).
-                if (!m._isTl) { m._signals = []; m._recSigOpen = undefined; }
-            });
+            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; m._recSigOpen = undefined; });
             // Новая сессия записи: у светофоров обнуляем запись ламп (движение не пишется)
             placedMarkers.forEach(m => {
                 if (m._isTl && !m._playing) { m._tlRec = []; m._tlInit = null; m._phaseOffset = 0; }
             });
             _recOn = true;
             _recStart = performance.now();
-            // Поворотники, уже включённые до старта записи, пишем с начала сессии
-            placedMarkers.forEach(m => {
-                if (m._blinkSide) recordSignalChange(m);
-            });
             _recRaf = requestAnimationFrame(recFrame);
             updateRecBtn();
             updatePlayAllBtn();
@@ -551,6 +528,7 @@
             marker._samples = [];
             marker._signals = [];
             marker._lastRel = 0;
+            marker._recSigOpen = { left: null, right: null };
             if (_playAll) {
                 marker._phaseOffset = (performance.now() - _masterStart) % _maxDur;
                 marker._lastSampleT = 0;
@@ -560,18 +538,9 @@
                 marker._lastSampleT = performance.now() - _recStart;
                 marker._samples.push({ t: marker._lastSampleT, lat: marker._lat, lon: marker._lon, heading: marker._heading });
             }
+            // Поворотники, включённые ещё до касания, пишем с начала записи машинки
+            recordSignalChange(marker);
         }
-    }, true);
-
-    // Тап по машинке на карте при открытой панели подсвечивает её строку
-    window.addEventListener('pointerdown', e => {
-        if (!_scrubOpen) return;
-        const t = e.target;
-        if (!t || !t.closest) return;
-        const markerEl = t.closest('.pic-marker');
-        if (!markerEl) return;
-        const marker = placedMarkers.find(m => m._select === markerEl);
-        if (marker) highlightCar(marker, false);
     }, true);
 
     // ---- Воспроизведение всех записей ----
@@ -709,35 +678,20 @@
         return (ms / 1000).toFixed(1) + 'с';
     }
 
-    function openScrubber(only) {
-        if (_scrubOpen) return;
+    function openScrubber(marker) {
+        if (_scrubOpen) { if (marker && marker !== _scrubMarker) { buildScrubRows(marker); } return; }
         if (_recOn) stopRec();
         if (_playAll) stopAll();
         _scrubOpen = true;
-        _scrubOnly = only || null;
-        document.body.classList.add('scrub-open');
+        _scrubMarker = marker || null;
         playables().forEach(m => { m._savedBlink = m._blinkSide; });
         hideAllRecBtns();
-        buildScrubRows();
+        buildScrubRows(marker);
         scrubModal.classList.add('visible');
     }
 
-    // Открыть панель записей только для одной машинки (кнопка REC над машинкой)
-    function openScrubberFor(marker) {
-        if (_scrubOpen) closeScrubber();
-        openScrubber(marker);
-        scrubTitle.textContent = (marker._id != null) ? ('Машинка #' + marker._id) : 'Запись';
-        if (marker) highlightCar(marker, false);
-    }
-
-    // Подсветить машинку на карте и её строку в панели записей.
+    // Отцентрировать камеру на машинке (без подсветки строки).
     function highlightCar(marker, centerView) {
-        _hlMarker = marker;
-        document.querySelectorAll('.pic-marker.hl').forEach(el => el.classList.remove('hl'));
-        if (marker && marker._select) marker._select.classList.add('hl');
-        scrubBody.querySelectorAll('.scrub-row').forEach(row => {
-            row.classList.toggle('row-hl', row._marker === marker);
-        });
         if (centerView && marker && map) {
             try {
                 // Центрируем камеру на машинке, сохраняя текущий азимут: обработка
@@ -748,12 +702,6 @@
                 map.update({ camera: { azimuth: az, duration: 600 } });
             } catch (e) {}
         }
-    }
-
-    function clearScrubHl() {
-        _hlMarker = null;
-        document.querySelectorAll('.pic-marker.hl').forEach(el => el.classList.remove('hl'));
-        scrubBody.querySelectorAll('.scrub-row').forEach(row => row.classList.remove('row-hl'));
     }
 
     // ---- REC-кнопка над машинкой (по длительному нажатию) ----
@@ -771,7 +719,7 @@
         b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
         b.addEventListener('click', e => {
             e.stopPropagation();
-            openScrubberFor(marker);
+            openScrubber(marker);
         });
         if (marker._rotWrap) marker._rotWrap.appendChild(b);
         else if (marker._select) marker._select.appendChild(b);
@@ -809,83 +757,105 @@
         marker._endTrim = undefined;
         marker._phaseOffset = 0;
         marker._signals = [];
-        if (_scrubOpen) buildScrubRows();
+        if (_scrubOpen) buildScrubRows(marker);
         updatePlayAllBtn();
     }
 
-    function buildScrubRows() {
+    function buildScrubRows(marker) {
         hideConfirm();
         scrubBody.textContent = '';
-        const cars = _scrubOnly ? playables().filter(m => m === _scrubOnly) : playables();
-        if (!cars.length) {
+        if (!marker || !hasRecording(marker)) {
+            scrubThumb.style.display = 'none';
+            scrubTime.style.display = 'none';
+            scrubTime.textContent = '';
+            scrubDeleteBtn.classList.add('hidden');
             const empty = document.createElement('div');
             empty.className = 'scrub-empty';
-            empty.textContent = 'Нет записей';
+            empty.textContent = 'Нет записи';
             scrubBody.appendChild(empty);
             return;
         }
-        cars.forEach(marker => {
+        scrubThumb.style.display = '';
+        scrubTime.style.display = '';
+        scrubDeleteBtn.classList.remove('hidden');
+        scrubThumb.src = marker._img ? marker._img.src : '';
+        {
             const dur = marker._samples[marker._samples.length - 1].t;
             if (marker._startTrim == null) marker._startTrim = 0;
             if (marker._endTrim == null) marker._endTrim = dur;
             const row = document.createElement('div');
             row.className = 'scrub-row';
             row._marker = marker;
-            const id = document.createElement('div');
-            id.className = 'scrub-id';
-            id.textContent = (marker._id != null) ? marker._id : '·';
-            const thumb = document.createElement('img');
-            thumb.className = 'scrub-thumb';
-            thumb.src = marker._img ? marker._img.src : '';
-            // Клик по строке: подсветить машинку на карте и центрировать камеру.
+            // Клик по строке: центрировать камеру на машинке.
             row.addEventListener('click', e => {
                 if (e.target && e.target.closest &&
-                    (e.target.closest('.scrub-del-btn') || e.target.closest('.scrub-arrow') ||
-                     e.target.closest('.scrub-range') || e.target.closest('.scrub-sigsec') ||
+                    (e.target.closest('.scrub-sigtrack') || e.target.closest('.scrub-sigsec') ||
                      e.target.closest('.scrub-confirm-btn'))) return;
                 highlightCar(marker, true);
             });
-            const arrowBtn = document.createElement('div');
-            arrowBtn.className = 'scrub-arrow';
-            arrowBtn.textContent = '▼';
             const sigsec = document.createElement('div');
-            sigsec.className = 'scrub-sigsec' + (marker._sigOpen ? ' open' : '');
-            arrowBtn.addEventListener('click', e => {
-                e.stopPropagation();
-                marker._sigOpen = !marker._sigOpen;
-                sigsec.classList.toggle('open', marker._sigOpen);
-                arrowBtn.classList.toggle('open', marker._sigOpen);
-            });
-            const delBtn = document.createElement('div');
-            delBtn.className = 'scrub-del-btn';
-            delBtn.textContent = '✕';
-            delBtn.addEventListener('click', e => {
-                e.stopPropagation();
-                showConfirm(marker);
-            });
-            const time = document.createElement('div');
-            time.className = 'scrub-time';
-            const dual = document.createElement('div');
-            dual.className = 'scrub-dual';
+            sigsec.className = 'scrub-sigsec';
+            const timeWrap = document.createElement('div');
+            timeWrap.className = 'scrub-timewrap';
+            timeWrap.appendChild(scrubThumb);
+            timeWrap.appendChild(scrubTime);
+            // Полоса времени в стиле полос поворотников: часовая песочница + трек
+            const timeLine = document.createElement('div');
+            timeLine.className = 'scrub-sigline scrub-timeline';
+            const timeLabel = document.createElement('div');
+            timeLabel.className = 'scrub-siglabel';
+            timeLabel.textContent = '⏳';
+            const timeTrack = document.createElement('div');
+            timeTrack.className = 'scrub-sigtrack scrub-timetrack';
             const active = document.createElement('div');
             active.className = 'scrub-active';
-            dual.appendChild(active);
-            const start = document.createElement('input');
-            start.type = 'range';
-            start.className = 'scrub-range scrub-start';
-            const end = document.createElement('input');
-            end.type = 'range';
-            end.className = 'scrub-range scrub-end';
-            dual.appendChild(start);
-            dual.appendChild(end);
-            row.appendChild(id);
-            row.appendChild(thumb);
-            row.appendChild(arrowBtn);
-            row.appendChild(delBtn);
-            row.appendChild(time);
-            row.appendChild(dual);
+            const actH0 = document.createElement('div');
+            actH0.className = 'sig-h sig-h-s';
+            const actH1 = document.createElement('div');
+            actH1.className = 'sig-h sig-h-e';
+            active.appendChild(actH0);
+            active.appendChild(actH1);
+            timeTrack.appendChild(active);
+            timeLine.appendChild(timeLabel);
+            timeLine.appendChild(timeTrack);
+            row.appendChild(timeWrap);
+            row.appendChild(timeLine);
+            // Перетаскивание краёв/середины зелёного отрезка = подгонка старта/конца
+            let tDrag = null;
+            const ttT = e => {
+                const r = timeTrack.getBoundingClientRect();
+                if (!r.width) return dur / 2;
+                return Math.max(0, Math.min(dur, (e.clientX - r.left) / r.width * dur));
+            };
+            const MINTRY = 0.15;
+            timeTrack.addEventListener('pointerdown', e => {
+                e.stopPropagation();
+                const t = ttT(e);
+                const s = marker._startTrim, en = marker._endTrim;
+                const r = timeTrack.getBoundingClientRect();
+                const sx = r.left + (s / dur) * r.width;
+                const ex = r.left + (en / dur) * r.width;
+                const edge = 14;
+                if (Math.abs(e.clientX - sx) <= edge) tDrag = { mode: 's' };
+                else if (Math.abs(e.clientX - ex) <= edge) tDrag = { mode: 'e' };
+                else tDrag = { mode: 's' };
+            });
+            timeTrack.addEventListener('pointermove', e => {
+                if (!tDrag) return;
+                const t = ttT(e);
+                if (tDrag.mode === 's') {
+                    marker._startTrim = Math.max(0, Math.min(t, marker._endTrim - MINTRY));
+                    scrubTo(marker, marker._startTrim);
+                } else if (tDrag.mode === 'e') {
+                    marker._endTrim = Math.min(dur, Math.max(t, marker._startTrim + MINTRY));
+                    scrubTo(marker, marker._endTrim);
+                }
+                refresh();
+            });
+            timeTrack.addEventListener('pointerup', () => { tDrag = null; });
+            timeTrack.addEventListener('pointercancel', () => { tDrag = null; });
 
-            // ---- редактор поворотников (2 линии, сворачиваемый) ----
+            // ---- редактор поворотников (2 линии, всегда раскрыты) ----
             const attachSigTrack = side => {
                 const line = document.createElement('div');
                 line.className = 'scrub-sigline';
@@ -913,7 +883,7 @@
                         del.addEventListener('click', e => {
                             e.stopPropagation();
                             marker._signals = marker._signals.filter(s => s !== seg);
-                            buildScrubRows();
+                            buildScrubRows(marker);
                         });
                         d.appendChild(hs);
                         d.appendChild(he);
@@ -942,13 +912,9 @@
                         if (e.target.closest('.sig-del')) return; // удаление — через click крестика
                         const onStart = e.target.closest('.sig-h-s');
                         const onEnd = e.target.closest('.sig-h-e');
-                        if (onStart || onEnd) {
-                            sigDrag = { mode: 'resize', marker, seg, edge: onStart ? 's' : 'e', segEl };
-                            scrubTo(marker, onStart ? seg.t0 : seg.t1);
-                        } else {
-                            sigDrag = { mode: 'move', marker, seg, segEl, startT: t, origT0: seg.t0 };
-                            scrubTo(marker, seg.t0);
-                        }
+                        if (!onStart && !onEnd) return; // перенос целиком отключён — только края
+                        sigDrag = { mode: 'resize', marker, seg, edge: onStart ? 's' : 'e', segEl };
+                        scrubTo(marker, onStart ? seg.t0 : seg.t1);
                         return;
                     }
                     sigDrag = { mode: 'draw', marker, side, t0: t, t1: t };
@@ -977,13 +943,6 @@
                         else seg.t1 = Math.min(dur, Math.max(t, seg.t0 + MINLEN));
                         placeSeg(sigDrag.segEl, seg);
                         scrubTo(marker, sigDrag.edge === 's' ? seg.t0 : seg.t1);
-                    } else if (sigDrag.mode === 'move') {
-                        const seg = sigDrag.seg;
-                        const len = seg.t1 - seg.t0;
-                        seg.t0 = Math.max(0, Math.min(sigDrag.origT0 + (t - sigDrag.startT), dur - len));
-                        seg.t1 = seg.t0 + len;
-                        placeSeg(sigDrag.segEl, seg);
-                        scrubTo(marker, seg.t0);
                     }
                 });
                 track.addEventListener('pointerup', e => {
@@ -996,12 +955,12 @@
                         marker._signals = marker._signals || [];
                         marker._signals.push({ t0: a, t1: b, side: d.side });
                         marker._signals.sort((x, y) => x.t0 - y.t0);
-                        buildScrubRows();
+                        buildScrubRows(marker);
                         return;
                     }
-                    if (d.mode === 'resize' || d.mode === 'move') {
+                    if (d.mode === 'resize') {
                         marker._signals.sort((x, y) => x.t0 - y.t0);
-                        buildScrubRows();
+                        buildScrubRows(marker);
                     }
                 });
                 track.addEventListener('pointercancel', () => { sigDrag = null; renderSegs(); });
@@ -1017,49 +976,20 @@
                 const p2 = (marker._endTrim / dur) * 100;
                 active.style.left = p1 + '%';
                 active.style.width = (p2 - p1) + '%';
-                time.textContent = fmtTime(marker._startTrim) + '–' + fmtTime(marker._endTrim);
+                scrubTime.textContent = fmtTime(marker._startTrim) + '–' + fmtTime(marker._endTrim);
             };
-            const sync = isStart => {
-                if (isStart) {
-                    marker._startTrim = (start.value / 1000) * dur;
-                    if (marker._startTrim > marker._endTrim) {
-                        marker._startTrim = marker._endTrim;
-                        start.value = (marker._endTrim / dur) * 1000;
-                    }
-                    scrubTo(marker, marker._startTrim);
-                } else {
-                    marker._endTrim = (end.value / 1000) * dur;
-                    if (marker._endTrim < marker._startTrim) {
-                        marker._endTrim = marker._startTrim;
-                        end.value = (marker._startTrim / dur) * 1000;
-                    }
-                    scrubTo(marker, marker._endTrim);
-                }
-                refresh();
-            };
-            start.min = 0; start.max = 1000;
-            end.min = 0; end.max = 1000;
-            start.value = (marker._startTrim / dur) * 1000;
-            end.value = (marker._endTrim / dur) * 1000;
-            start.addEventListener('input', () => sync(true));
-            end.addEventListener('input', () => sync(false));
             scrubTo(marker, marker._startTrim);
             refresh();
-        });
+        }
         scrubModal.classList.add('visible');
-        // После пересборки строк восстанавливаем подсветку последней выбранной машинки
-        if (_hlMarker && playables().indexOf(_hlMarker) !== -1) highlightCar(_hlMarker, false);
     }
 
     function closeScrubber() {
         hideConfirm();
         if (!_scrubOpen) return;
         _scrubOpen = false;
-        _scrubOnly = null;
-        clearScrubHl();
+        _scrubMarker = null;
         hideAllRecBtns();
-        document.body.classList.remove('scrub-open');
-        scrubTitle.textContent = 'Записи';
         scrubModal.classList.remove('visible');
         playables().forEach(m => applySignal(m, m._savedBlink));
     }
@@ -1068,28 +998,6 @@
     confirmYes.addEventListener('click', () => { const m = _confirmMarker; hideConfirm(); if (m) deleteRecording(m); });
     confirmNo.addEventListener('click', hideConfirm);
     confirmModal.addEventListener('click', e => { if (e.target === confirmModal) hideConfirm(); });
-
-    // ---- Растягивание шторки записей за заголовок (как в менеджере сцен) ----
-    function attachScrubDrag() {
-        let drag = null;
-        scrubHeader.addEventListener('pointerdown', (e) => {
-            if (e.target.closest && e.target.closest('.scrub-close')) return;
-            scrubModal.classList.add('scrub-dragging');
-            drag = { startY: e.clientY, startH: scrubModal.offsetHeight };
-            scrubHeader.setPointerCapture(e.pointerId);
-            e.preventDefault();
-        });
-        scrubHeader.addEventListener('pointermove', (e) => {
-            if (!drag) return;
-            const h = drag.startH + (drag.startY - e.clientY);
-            const vh = window.innerHeight;
-            scrubModal.style.height = Math.min(vh, Math.max(vh * 0.12, h)) + 'px';
-        });
-        const endDrag = () => { drag = null; scrubModal.classList.remove('scrub-dragging'); };
-        scrubHeader.addEventListener('pointerup', endDrag);
-        scrubHeader.addEventListener('pointercancel', endDrag);
-    }
-    attachScrubDrag();
 
     // ---- Кнопки ----
     function updateRecBtn() {
@@ -1124,20 +1032,9 @@
 
     recAllBtn.addEventListener('click', toggleRec);
     playAllBtn.addEventListener('click', () => {
-        if (_suppressClick) { _suppressClick = false; return; }
         if (_scrubOpen) { closeScrubber(); return; }
         if (_playAll) { if (_recOn) stopRec(); stopAll(); } else startAll();
     });
-    playAllBtn.addEventListener('pointerdown', e => {
-        clearTimeout(_scrubTimer);
-        _suppressClick = false;
-        _scrubTimer = setTimeout(() => {
-            _suppressClick = true;
-            openScrubber();
-        }, 450);
-    });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
-        playAllBtn.addEventListener(ev, () => clearTimeout(_scrubTimer)));
 
     // ---- Патч removeMarker: обновляем видимость кнопки PLAY ----
     const origRemove = window.removeMarker;

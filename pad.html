@@ -312,15 +312,6 @@
         @keyframes spin { to { transform:rotate(360deg); } }
         .pic-marker { max-width:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; touch-action:none; }
 
-        /* Номер машинки/светофора: скрыт, пока не открыта панель записей */
-        .pic-badge {
-            display:none; position:absolute; top:-6px; left:50%; transform:translate(-50%,-50%);
-            min-width:18px; height:18px; padding:0 4px; box-sizing:border-box; border-radius:9px;
-            background:rgba(0,0,0,0.72); border:0.5px solid rgba(255,255,255,0.3);
-            color:#FFD60A; font-size:11px; font-weight:700; line-height:17px; text-align:center;
-            pointer-events:none; z-index:3;
-        }
-        body.scrub-open .pic-badge { display:block; }
         /* Изображение машинки всегда под управляющими элементами над ней */
         .pic-marker .rot-wrap { z-index:0; }
         .rot-wrap { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
@@ -518,8 +509,6 @@
 <script>
 let map = null, userMarker = null, lastPos = null;
 let placedMarkers = [], selectedPic = null, drawMode = false, drawFeature = null, drawing = false;
-// Сквозная нумерация машинок и светофоров для идентификации в панели записей
-let _carSerial = 1;
 let eraserMode = false, drawnLines = [], eraserDrag = false;
 let drawColor = '#000000';
 let drawWidth = 5;
@@ -1068,21 +1057,6 @@ function addDrawPoint(coords, screen) {
     }
 }
 
-// Бейдж с номером машинки/светофора: виден только при открытой панели записей
-// (тело получает класс scrub-open). Номер присваивается счётиком _carSerial.
-// Хелпер вызывается из buildPicMarker (машинки) и placeTlMarker (светофоры).
-window.attachCarBadge = function (marker) {
-    if (!marker || marker._id != null) return;
-    marker._id = _carSerial++;
-    const el = marker._select;
-    if (!el || el.querySelector('.pic-badge')) return;
-    const badge = document.createElement('div');
-    badge.className = 'pic-badge';
-    badge.textContent = marker._id;
-    el.appendChild(badge);
-    marker._badge = badge;
-};
-
 // Фабрика маркера (машинка/знак): используется placePic и restoreScene
 function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
     const el = document.createElement('div');
@@ -1120,7 +1094,7 @@ function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
     marker._select = el;
     setupTopDrag(marker);
     setupMarkerLongPress(marker);
-    if (!isZnak) { ensureIndicators(marker); window.attachCarBadge(marker); }
+    if (!isZnak) { ensureIndicators(marker); }
     updatePicMarker(marker);
     return marker;
 }
