@@ -48,6 +48,7 @@
             transition:transform .3s ease, visibility .3s;
         }
         #scrubModal.visible { transform:translateY(0); visibility:visible; }
+        #scrubModal.scrub-dragging { transition:none; }
         .scrub-header {
             display:flex; align-items:center; gap:8px;
             padding:8px 10px; border-bottom:0.5px solid rgba(255,255,255,0.12); flex-shrink:0;
@@ -66,6 +67,16 @@
         }
         .scrub-thumb {
             width:36px; height:36px; object-fit:contain; flex-shrink:0; pointer-events:none;
+        }
+        .scrub-id {
+            display:flex; align-items:center; justify-content:center; flex-shrink:0;
+            width:24px; height:24px; border-radius:50%;
+            background:rgba(0,0,0,0.6); border:1px solid #FFD60A; color:#FFD60A;
+            font-size:12px; font-weight:700; line-height:1;
+        }
+        .scrub-row.row-hl {
+            background:rgba(255,214,10,0.14); border:1px solid rgba(255,214,10,0.5);
+            border-radius:12px; padding:9px 7px;
         }
         .scrub-del-btn {
             width:26px; height:26px; border-radius:50%; flex-shrink:0;
@@ -120,6 +131,19 @@
         .scrub-start::-moz-range-thumb { background:#FF453A; }
         .scrub-end::-moz-range-thumb { background:#FFD60A; }
         .scrub-empty { padding:24px 12px; font-size:15px; color:rgba(255,255,255,0.55); text-align:center; }
+        /* Круглая REC-кнопка над машинкой (появляется по длительному нажатию, если есть запись) */
+        .rec-btn {
+            position:absolute; top:-26px; left:50%; transform:translate(-50%,-50%);
+            display:none; align-items:center; justify-content:center;
+            min-width:34px; height:34px; border-radius:50%; padding:0;
+            background:rgba(255,69,58,0.95); border:0.5px solid rgba(255,255,255,0.35);
+            color:#fff; font-size:11px; font-weight:700; line-height:1;
+            box-shadow:0 4px 14px rgba(0,0,0,0.5); cursor:pointer; pointer-events:auto; z-index:1000;
+            touch-action:manipulation; white-space:nowrap;
+        }
+        .rec-btn.visible { display:flex; }
+        .rec-btn:active { transform:translate(-50%,-50%) scale(0.9); }
+        .rec-btn .rec-dot { width:8px; height:8px; border-radius:50%; background:#fff; flex-shrink:0; }
         .scrub-row { flex-wrap:wrap; }
         .scrub-arrow {
             width:22px; height:22px; border-radius:50%; flex-shrink:0;
@@ -182,6 +206,8 @@
     let _scrubTimer = null;
     let _suppressClick = false;
     let _confirmMarker = null;
+    let _hlMarker = null;    // выделенная машинка (панель записей открыта)
+    let _scrubOnly = null;   // панель открыта только для одной машинки
 
     const scrubModal = document.createElement('div');
     scrubModal.id = 'scrubModal';
@@ -471,6 +497,17 @@
         }
     }, true);
 
+    // Тап по машинке на карте при открытой панели подсвечивает её строку
+    window.addEventListener('pointerdown', e => {
+        if (!_scrubOpen) return;
+        const t = e.target;
+        if (!t || !t.closest) return;
+        const markerEl = t.closest('.pic-marker');
+        if (!markerEl) return;
+        const marker = placedMarkers.find(m => m._select === markerEl);
+        if (marker) highlightCar(marker, false);
+    }, true);
+
     // ---- Воспроизведение всех записей ----
     const MASTER_FRAME_MS = 33; // ~30fps — данные записаны ~10fps, этого достаточно для плавности
 
@@ -527,6 +564,7 @@
     function startAll() {
         if (_playAll) return;
         if (_recOn) stopRec();
+        hideAllRecBtns();
         const targets = playables();
         if (!targets.length) return;
         targets.forEach(m => {
@@ -587,15 +625,89 @@
         return (ms / 1000).toFixed(1) + 'с';
     }
 
-    function openScrubber() {
+    function openScrubber(only) {
         if (_scrubOpen) return;
         if (_recOn) stopRec();
         if (_playAll) stopAll();
         _scrubOpen = true;
+        _scrubOnly = only || null;
+        document.body.classList.add('scrub-open');
         playables().forEach(m => { m._savedBlink = m._blinkSide; });
+        hideAllRecBtns();
         buildScrubRows();
         scrubModal.classList.add('visible');
     }
+
+    // Открыть панель записей только для одной машинки (кнопка REC над машинкой)
+    function openScrubberFor(marker) {
+        if (_scrubOpen) closeScrubber();
+        openScrubber(marker);
+        scrubTitle.textContent = (marker._id != null) ? ('Машинка #' + marker._id) : 'Запись';
+        if (marker) highlightCar(marker, false);
+    }
+
+    // Подсветить машинку на карте и её строку в панели записей.
+    function highlightCar(marker, centerView) {
+        _hlMarker = marker;
+        document.querySelectorAll('.pic-marker.hl').forEach(el => el.classList.remove('hl'));
+        if (marker && marker._select) marker._select.classList.add('hl');
+        scrubBody.querySelectorAll('.scrub-row').forEach(row => {
+            row.classList.toggle('row-hl', row._marker === marker);
+        });
+        if (centerView && marker && map) {
+            try {
+                // Центрируем камеру на машинке, сохраняя текущий азимут: обработка
+                // location сбрасывает азимут, поэтому возвращаем его camera-only.
+                const az = (map.azimuth != null && isFinite(map.azimuth)) ? map.azimuth : 0;
+                const zoom = (map.zoom != null && isFinite(map.zoom)) ? map.zoom : 16;
+                map.setLocation({ center: [marker._lon, marker._lat], zoom: zoom, duration: 600 });
+                map.update({ camera: { azimuth: az, duration: 600 } });
+            } catch (e) {}
+        }
+    }
+
+    function clearScrubHl() {
+        _hlMarker = null;
+        document.querySelectorAll('.pic-marker.hl').forEach(el => el.classList.remove('hl'));
+        scrubBody.querySelectorAll('.scrub-row').forEach(row => row.classList.remove('row-hl'));
+    }
+
+    // ---- REC-кнопка над машинкой (по длительному нажатию) ----
+    function hasRecording(m) {
+        return !!(m._samples && m._samples.length >= 2 && hasMovement(m));
+    }
+
+    function ensureRecBtn(marker) {
+        if (marker._recBtn) return marker._recBtn;
+        const b = document.createElement('div');
+        b.className = 'rec-btn';
+        b.innerHTML = '<span class="rec-dot"></span>';
+        b.title = 'Запись машинки';
+        b.setAttribute('aria-label', 'Запись машинки');
+        b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
+        b.addEventListener('click', e => {
+            e.stopPropagation();
+            openScrubberFor(marker);
+        });
+        if (marker._rotWrap) marker._rotWrap.appendChild(b);
+        else if (marker._select) marker._select.appendChild(b);
+        marker._recBtn = b;
+        return b;
+    }
+
+    function hideAllRecBtns() {
+        placedMarkers.forEach(m => { if (m._recBtn) m._recBtn.classList.remove('visible'); });
+    }
+
+    // Хук из pad.html: длительное нажатие на машинку — показать/скрыть REC-кнопку
+    window.onMarkerLongPress = function (marker) {
+        if (!marker || marker._isTl || !marker._select) return;
+        if (!hasRecording(marker)) return;
+        const b = ensureRecBtn(marker);
+        const showing = b.classList.contains('visible');
+        hideAllRecBtns();
+        b.classList.toggle('visible', !showing);
+    };
 
     function showConfirm(marker) {
         _confirmMarker = marker;
@@ -620,7 +732,7 @@
     function buildScrubRows() {
         hideConfirm();
         scrubBody.textContent = '';
-        const cars = playables();
+        const cars = _scrubOnly ? playables().filter(m => m === _scrubOnly) : playables();
         if (!cars.length) {
             const empty = document.createElement('div');
             empty.className = 'scrub-empty';
@@ -634,9 +746,21 @@
             if (marker._endTrim == null) marker._endTrim = dur;
             const row = document.createElement('div');
             row.className = 'scrub-row';
+            row._marker = marker;
+            const id = document.createElement('div');
+            id.className = 'scrub-id';
+            id.textContent = (marker._id != null) ? marker._id : '·';
             const thumb = document.createElement('img');
             thumb.className = 'scrub-thumb';
             thumb.src = marker._img ? marker._img.src : '';
+            // Клик по строке: подсветить машинку на карте и центрировать камеру.
+            row.addEventListener('click', e => {
+                if (e.target && e.target.closest &&
+                    (e.target.closest('.scrub-del-btn') || e.target.closest('.scrub-arrow') ||
+                     e.target.closest('.scrub-range') || e.target.closest('.scrub-sigsec') ||
+                     e.target.closest('.scrub-confirm-btn'))) return;
+                highlightCar(marker, true);
+            });
             const arrowBtn = document.createElement('div');
             arrowBtn.className = 'scrub-arrow';
             arrowBtn.textContent = '▼';
@@ -670,6 +794,7 @@
             end.className = 'scrub-range scrub-end';
             dual.appendChild(start);
             dual.appendChild(end);
+            row.appendChild(id);
             row.appendChild(thumb);
             row.appendChild(arrowBtn);
             row.appendChild(delBtn);
@@ -838,12 +963,19 @@
             refresh();
         });
         scrubModal.classList.add('visible');
+        // После пересборки строк восстанавливаем подсветку последней выбранной машинки
+        if (_hlMarker && playables().indexOf(_hlMarker) !== -1) highlightCar(_hlMarker, false);
     }
 
     function closeScrubber() {
         hideConfirm();
         if (!_scrubOpen) return;
         _scrubOpen = false;
+        _scrubOnly = null;
+        clearScrubHl();
+        hideAllRecBtns();
+        document.body.classList.remove('scrub-open');
+        scrubTitle.textContent = 'Записи';
         scrubModal.classList.remove('visible');
         playables().forEach(m => applySignal(m, m._savedBlink));
     }
@@ -852,6 +984,28 @@
     confirmYes.addEventListener('click', () => { const m = _confirmMarker; hideConfirm(); if (m) deleteRecording(m); });
     confirmNo.addEventListener('click', hideConfirm);
     confirmModal.addEventListener('click', e => { if (e.target === confirmModal) hideConfirm(); });
+
+    // ---- Растягивание шторки записей за заголовок (как в менеджере сцен) ----
+    function attachScrubDrag() {
+        let drag = null;
+        scrubHeader.addEventListener('pointerdown', (e) => {
+            if (e.target.closest && e.target.closest('.scrub-close')) return;
+            scrubModal.classList.add('scrub-dragging');
+            drag = { startY: e.clientY, startH: scrubModal.offsetHeight };
+            scrubHeader.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        });
+        scrubHeader.addEventListener('pointermove', (e) => {
+            if (!drag) return;
+            const h = drag.startH + (drag.startY - e.clientY);
+            const vh = window.innerHeight;
+            scrubModal.style.height = Math.min(vh, Math.max(vh * 0.12, h)) + 'px';
+        });
+        const endDrag = () => { drag = null; scrubModal.classList.remove('scrub-dragging'); };
+        scrubHeader.addEventListener('pointerup', endDrag);
+        scrubHeader.addEventListener('pointercancel', endDrag);
+    }
+    attachScrubDrag();
 
     // ---- Кнопки ----
     function updateRecBtn() {
@@ -905,6 +1059,7 @@
     const origRemove = window.removeMarker;
     window.removeMarker = function (marker) {
         origRemove(marker);
+        hideAllRecBtns();
         updatePlayAllBtn();
     };
 

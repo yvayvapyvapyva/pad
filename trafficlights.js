@@ -353,6 +353,7 @@
         if (window.setupTopDrag) setupTopDrag(marker);
         setupTlLongPress(marker);
         setupLampTaps(marker);
+        if (window.attachCarBadge) window.attachCarBadge(marker);
         updatePicMarker(marker);
         map.addChild(marker);
         placedMarkers.push(marker);
