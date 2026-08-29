@@ -111,6 +111,10 @@
             position:absolute; top:2px; bottom:2px; border-radius:4px;
             background:#30D158; opacity:0.9; pointer-events:none;
         }
+        .scrub-wait {
+            position:absolute; top:2px; bottom:2px; border-radius:4px;
+            background:rgba(255,255,255,0.06); pointer-events:none;
+        }
         .scrub-empty { padding:24px 12px; font-size:15px; color:rgba(255,255,255,0.55); text-align:center; }
         /* Красная кнопка удаления записи внизу шторки */
         #scrubFooter { padding:8px 12px; flex-shrink:0; }
@@ -813,6 +817,9 @@
             const dur = marker._samples[marker._samples.length - 1].t;
             if (marker._startTrim == null) marker._startTrim = 0;
             if (marker._endTrim == null) marker._endTrim = dur;
+            // страховка: старые сохранения могли увести границы за длительность записи
+            if (marker._startTrim > dur) marker._startTrim = 0;
+            if (marker._endTrim > dur) marker._endTrim = dur;
             const row = document.createElement('div');
             row.className = 'scrub-row';
             row._marker = marker;
@@ -848,6 +855,9 @@
             loopInput.addEventListener('input', () => {
                 const v = parseFloat(loopInput.value);
                 marker._loopMs = (isFinite(v) && v > 0) ? Math.round(v * 1000) : undefined;
+                if (marker._loopMs != null) {
+                    marker._phaseOffset = (marker._phaseOffset || 0) % marker._loopMs;
+                }
                 refresh();
             });
             loopInput.addEventListener('change', () => {
@@ -862,6 +872,11 @@
             timeLabel.textContent = '⏳';
             const timeTrack = document.createElement('div');
             timeTrack.className = 'scrub-sigtrack scrub-timetrack';
+            // Шкала = весь цикл машинки [0, loop]; затемнённые зоны — отрезанное начало и хвост/стоянка
+            const waitStart = document.createElement('div');
+            waitStart.className = 'scrub-wait';
+            const waitEnd = document.createElement('div');
+            waitEnd.className = 'scrub-wait';
             const active = document.createElement('div');
             active.className = 'scrub-active';
             const actH0 = document.createElement('div');
@@ -870,45 +885,68 @@
             actH1.className = 'sig-h sig-h-e';
             active.appendChild(actH0);
             active.appendChild(actH1);
+            timeTrack.appendChild(waitStart);
+            timeTrack.appendChild(waitEnd);
             timeTrack.appendChild(active);
             timeLine.appendChild(timeLabel);
             timeLine.appendChild(timeTrack);
             row.appendChild(timeWrap);
             row.appendChild(timeLine);
-            // Перетаскивание краёв/середины зелёного отрезка = подгонка старта/конца
+            // ---- Ползунок времени: ось = длительность записи [0..dur] (как линии поворотников).
+            //      Зелёный = проигрываемый интервал [startTrim..endTrim], затемнения — отрезанные части.
+            //      Цикл из поля «Цикл» сюда не подмешивается — ручки точно следуют за пальцем. ----
             let tDrag = null;
-            const ttT = e => {
-                const r = timeTrack.getBoundingClientRect();
-                if (!r.width) return dur / 2;
-                return Math.max(0, Math.min(dur, (e.clientX - r.left) / r.width * dur));
+            const MINTRY = 150; // минимальная длина интервала, мс (0.15с)
+            const msAt = (rect, cx) => {
+                if (!rect.width) return dur / 2;
+                return Math.max(0, Math.min(dur, (cx - rect.left) / rect.width * dur));
             };
-            const MINTRY = 0.15;
             timeTrack.addEventListener('pointerdown', e => {
                 e.stopPropagation();
-                const t = ttT(e);
-                const s = marker._startTrim, en = marker._endTrim;
-                const r = timeTrack.getBoundingClientRect();
-                const sx = r.left + (s / dur) * r.width;
-                const ex = r.left + (en / dur) * r.width;
-                const edge = 14;
-                if (Math.abs(e.clientX - sx) <= edge) tDrag = { mode: 's' };
-                else if (Math.abs(e.clientX - ex) <= edge) tDrag = { mode: 'e' };
-                else tDrag = { mode: 's' };
+                const rect = timeTrack.getBoundingClientRect();
+                if (!rect.width) return;
+                const st = marker._startTrim;
+                const en = Math.min(marker._endTrim != null ? marker._endTrim : dur, dur);
+                const sx = rect.left + (st / dur) * rect.width;
+                const ex = rect.left + (en / dur) * rect.width;
+                const edge = 24;
+                const ds = Math.abs(e.clientX - sx);
+                const de = Math.abs(e.clientX - ex);
+                let mode = null;
+                if (ds <= edge && de <= edge) mode = ds <= de ? 's' : 'e';
+                else if (ds <= edge) mode = 's';
+                else if (de <= edge) mode = 'e';
+                if (!mode) {
+                    // тап мимо ручек — только предпросмотр позиции машинки, тримы не меняем
+                    scrubTo(marker, msAt(rect, e.clientX) + (marker._phaseOffset || 0));
+                    return;
+                }
+                tDrag = { mode, en };
+                try { timeTrack.setPointerCapture(e.pointerId); } catch (_) {}
             });
             timeTrack.addEventListener('pointermove', e => {
                 if (!tDrag) return;
-                const t = ttT(e);
+                const rect = timeTrack.getBoundingClientRect();
+                if (!rect.width) return;
+                const el = msAt(rect, e.clientX);
                 if (tDrag.mode === 's') {
-                    marker._startTrim = Math.max(0, Math.min(t, marker._endTrim - MINTRY));
+                    // Левая ручка обрезает начало записи: левый край идёт за пальцем, не дальше end-MINTRY
+                    marker._startTrim = Math.max(0, Math.min(el, tDrag.en - MINTRY));
                     scrubTo(marker, marker._startTrim);
-                } else if (tDrag.mode === 'e') {
-                    marker._endTrim = Math.min(dur, Math.max(t, marker._startTrim + MINTRY));
+                } else {
+                    // Правая ручка обрезает конец записи: правый край идёт за пальцем, не левее start+MINTRY
+                    marker._endTrim = Math.max(marker._startTrim + MINTRY, Math.min(el, dur));
                     scrubTo(marker, marker._endTrim);
                 }
                 refresh();
             });
-            timeTrack.addEventListener('pointerup', () => { tDrag = null; });
-            timeTrack.addEventListener('pointercancel', () => { tDrag = null; });
+            const endTimeDrag = e => {
+                if (!tDrag) return;
+                try { if (timeTrack.hasPointerCapture && timeTrack.hasPointerCapture(e.pointerId)) timeTrack.releasePointerCapture(e.pointerId); } catch (_) {}
+                tDrag = null;
+            };
+            timeTrack.addEventListener('pointerup', endTimeDrag);
+            timeTrack.addEventListener('pointercancel', endTimeDrag);
 
             // ---- редактор поворотников (2 линии, всегда раскрыты) ----
             const attachSigTrack = side => {
@@ -1028,12 +1066,15 @@
 
             const refresh = () => {
                 const st = marker._startTrim;
-                // Воспроизводится только первая `цикл` секунд записи — полоса и текст их показывают
-                const en = Math.max(st, Math.min(marker._endTrim, st + loopMsOf(marker)));
+                // Зелёный отрезок = проигрываемый интервал записи [st..endTrim], ось = длительность записи
+                const en = Math.max(st, Math.min(marker._endTrim != null ? marker._endTrim : dur, dur));
                 const p1 = (st / dur) * 100;
                 const p2 = (en / dur) * 100;
                 active.style.left = p1 + '%';
-                active.style.width = (p2 - p1) + '%';
+                active.style.width = Math.max(0, p2 - p1) + '%';
+                waitStart.style.width = p1 + '%';
+                waitEnd.style.left = Math.min(100, p2) + '%';
+                waitEnd.style.width = Math.max(0, 100 - p2) + '%';
                 scrubTime.textContent = fmtTime(st) + '–' + fmtTime(en) + ' (' + fmtTime(en - st) + ')';
             };
             scrubTo(marker, marker._startTrim);
