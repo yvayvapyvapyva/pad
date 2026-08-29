@@ -1444,7 +1444,8 @@ function setupMarkerLongPress(marker) {
 
 // Метры на пиксель (Web Mercator, тайлы 256px)
 function metersPerPixel(lat) {
-    const zoom = map.zoom || 0;
+    const zoom = map.zoom;
+    if (zoom == null || !isFinite(zoom)) return 0;
     return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
 }
 
@@ -1510,8 +1511,17 @@ function updatePicMarker(marker) {
 let _lastZoomForSize = null;
 
 function updateAllPicMarkers(event) {
-    if (event && event.camera && event.camera.azimuth !== undefined) mapRot = event.camera.azimuth * 180 / Math.PI;
-    const zoom = map.zoom;
+    if (!map) return;
+    const cam = (event && event.camera) || {};
+    const azDeg = isFinite(cam.azimuth) ? cam.azimuth * 180 / Math.PI : undefined;
+    if (azDeg !== undefined) mapRot = azDeg;
+    const zoom = isFinite(cam.zoom) ? cam.zoom : map.zoom;
+    const cLat = cam.center && isFinite(cam.center[1])
+        ? cam.center[1]
+        : (map.center && isFinite(map.center[1]) ? map.center[1] : NaN);
+    // Камера ещё не стабилизировалась (иногда на первом кадре zoom/center = NaN) —
+    // пропускаем кадр, чтобы не пересчитывать размеры в мусорные значения.
+    if (!isFinite(zoom) || !isFinite(cLat)) return;
     if (zoom !== _lastZoomForSize) {
         // zoom изменился — пересчитываем размер всех маркеров
         _lastZoomForSize = zoom;
@@ -1519,11 +1529,13 @@ function updateAllPicMarkers(event) {
         // и толщину линий, нарисованных в «метровом» режиме (widthM).
         // Старые линии без widthM остаются фиксированной пиксельной толщины.
         if (drawnLines.some(l => l.widthM)) {
-            const mpp = metersPerPixel(map.center[1]);
-            drawnLines.forEach(l => {
-                if (!l.widthM) return;
-                l.feature.update({ style: { stroke: [{ width: Math.max(1, l.widthM / mpp), color: hexToRgba(l.color, 0.7) }] } });
-            });
+            const mpp = metersPerPixel(cLat);
+            if (isFinite(mpp) && mpp > 0) {
+                drawnLines.forEach(l => {
+                    if (!l.widthM) return;
+                    l.feature.update({ style: { stroke: [{ width: Math.max(1, l.widthM / mpp), color: hexToRgba(l.color, 0.7) }] } });
+                });
+            }
         }
     } else {
         // zoom не менялся (перемещение/поворот) — только поворот, без пересчёта размера

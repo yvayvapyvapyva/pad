@@ -198,18 +198,19 @@
 
         if (map && data.camera) {
             try {
-                if (Array.isArray(data.camera.center) && data.camera.center.length >= 2 && data.camera.zoom != null) {
-                    const loc = {
-                        center: [data.camera.center[0], data.camera.center[1]],
-                        zoom: data.camera.zoom
-                    };
-                    loc.duration = 0;
-                    map.update({ location: loc });
-                }
-                if (data.camera.azimuth != null && map.setCamera) {
-                    map.setCamera({ azimuth: data.camera.azimuth });
-                } else if (data.camera.azimuth != null) {
-                    map.update({ camera: { azimuth: data.camera.azimuth } });
+                const hasCenter = Array.isArray(data.camera.center) && data.camera.center.length >= 2 && data.camera.zoom != null;
+                const hasAz = data.camera.azimuth != null;
+                if (hasCenter && hasAz) {
+                    map.update({
+                        location: { center: [data.camera.center[0], data.camera.center[1]], zoom: data.camera.zoom, duration: 0 },
+                        camera: { azimuth: data.camera.azimuth, duration: 0 }
+                    });
+                } else if (hasCenter) {
+                    map.update({ location: { center: [data.camera.center[0], data.camera.center[1]], zoom: data.camera.zoom, duration: 0 } });
+                } else if (hasAz && map.setCamera) {
+                    map.setCamera({ azimuth: data.camera.azimuth, duration: 0 });
+                } else if (hasAz) {
+                    map.update({ camera: { azimuth: data.camera.azimuth, duration: 0 } });
                 }
             } catch (e) {}
         }
