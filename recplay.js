@@ -719,6 +719,9 @@
         b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
         b.addEventListener('click', e => {
             e.stopPropagation();
+            hideAllRecBtns();
+            // Панель машинки (кнопки мигалок) при открытии записи скрываем
+            if (marker._panelOpen) setPanel(marker, false);
             openScrubber(marker);
         });
         if (marker._rotWrap) marker._rotWrap.appendChild(b);
