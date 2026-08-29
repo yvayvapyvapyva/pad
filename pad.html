@@ -1480,7 +1480,8 @@ function updatePicSize(marker) {
             marker._leg.style.width = (legH * 0.09) + 'px';
         }
     } else {
-        imgH = (marker._sizeM || PIC_SIZE_M) / mpp;
+        // Машинка: минимальная длина 15px по аналогии с минимумом светофора.
+        imgH = Math.max(15, (marker._sizeM || PIC_SIZE_M) / mpp);
         marker._img.style.height = imgH + 'px';
     }
     if (marker._indicators) {
