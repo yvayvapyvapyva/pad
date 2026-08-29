@@ -859,9 +859,8 @@
             loopInput.addEventListener('input', () => {
                 const v = parseFloat(loopInput.value);
                 marker._loopMs = (isFinite(v) && v > 0) ? Math.round(v * 1000) : undefined;
-                if (marker._loopMs != null) {
-                    marker._phaseOffset = (marker._phaseOffset || 0) % marker._loopMs;
-                }
+                // Паузу перед движением (phaseOffset) не трогаем — укороченный цикл
+                // обрезает только правую часть (хвост/конец движения) на шкале и в воспроизведении.
                 refresh();
             });
             loopInput.addEventListener('change', () => {
