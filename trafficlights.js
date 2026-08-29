@@ -370,7 +370,6 @@
     // ---- Обновление на карте (вызывается из updatePicMarker) ----
     window.updateTlMarker = function (marker) {
         if (!marker || !marker._tlRoot) return;
-        if (window.updateTlTransform) window.updateTlTransform(marker);
         // Динамический размер: высота светофора = TL_HEIGHT_M метров на местности,
         // но не мельче 15px (иначе не ухватить) и не крупнее 100px
         let pxH = window.TL_PX_SIZE;
@@ -385,6 +384,9 @@
         marker._tlPx = pxH;
         marker._tlScale = pxH / TL_BASE_H; // для расчёта границы в setupTopDrag
         marker._tlRoot.style.transform = 'scale(' + marker._tlScale + ')';
+        // Поворот после вычисления масштаба: updateTlTransform гвардится по _tlScale,
+        // поэтому при первом вызове (размещение на карте) должен дожидаться его.
+        if (window.updateTlTransform) window.updateTlTransform(marker);
         // Ножка: верхние 35% прячутся под корпус (ножка на слое позади).
         // Координаты — от layout-верха rotWrap (64px), визуальный центр корпуса на 32px.
         // Ножка считается от РЕАЛЬНОГО размера корпуса (без минимума 15px), чтобы она
