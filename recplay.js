@@ -53,7 +53,17 @@
             padding:8px 10px; border-bottom:0.5px solid rgba(255,255,255,0.12); flex-shrink:0;
             position:relative;
         }
-        .scrub-row .scrub-timewrap { flex:0 0 100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:4px 0 6px; }
+        .scrub-row .scrub-timewrap { flex:0 0 100%; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 0 6px; }
+        .scrub-loop { display:flex; align-items:center; gap:4px; font-size:12px; color:rgba(255,255,255,0.7); flex-shrink:0; }
+        .scrub-loop input {
+            width:64px; height:27px; padding:0 6px; border-radius:8px; border:0.5px solid rgba(255,255,255,0.18);
+            background:rgba(255,255,255,0.08); color:#fff; font-size:14px; text-align:center;
+            font-variant-numeric:tabular-nums; outline:none; touch-action:manipulation;
+            -webkit-appearance:none; appearance:none; -moz-appearance:textfield;
+        }
+        .scrub-loop input::-webkit-inner-spin-button,
+        .scrub-loop input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+        .scrub-loop input:focus { border-color:#30D158; }
         .scrub-title {
             position:absolute; left:0; right:0; text-align:center; pointer-events:none;
             font-size:13px; font-weight:600; color:rgba(255,255,255,0.9);
@@ -307,6 +317,21 @@
         return Math.max.apply(null, cars.map(endPhase).concat(1)) || 1;
     }
 
+    // Длительность цикла машинки (мс): заданное поле или общий период воспроизведения.
+    function loopDur(m) {
+        return (m._loopMs != null && m._loopMs > 0) ? m._loopMs : _maxDur;
+    }
+
+    // Самая длинная запись на сцене — значение цикла по умолчанию.
+    function loopDefaultMs() {
+        return maxDurOf(playables().concat(tlRecMarkers()));
+    }
+
+    // Актуальный цикл машинки для UI/отображения (если не задан — самая длинная запись).
+    function loopMsOf(m) {
+        return (m._loopMs != null && m._loopMs > 0) ? m._loopMs : loopDefaultMs();
+    }
+
     // Применить состояние машинки на момент времени elapsed (мс) цикла.
     // Отрезок записи [startTrim, endTrim] заполняет собой весь цикл машинки:
     // на elapsed=0 машинка находится в точке startTrim и движется к endTrim к концу
@@ -378,9 +403,9 @@
     // и поворотников, чтобы они всегда попадали точно в свои места.
     function relTime(marker) {
         if (_playAll) {
-            const phase = (performance.now() - _masterStart) % _maxDur;
+            const phase = (performance.now() - _masterStart) % loopDur(marker);
             let t = phase - (marker._phaseOffset || 0);
-            if (marker._lastRel != null && t < marker._lastRel) t += _maxDur;
+            if (marker._lastRel != null && t < marker._lastRel) t += loopDur(marker);
             marker._lastRel = t;
             return t;
         }
@@ -447,7 +472,7 @@
     function recordTlLamp(marker, key, on) {
         if (!_recOn || !marker || !marker._isTl || marker._playing) return;
         if (_playAll && marker._phaseOffset == null) {
-            marker._phaseOffset = (performance.now() - _masterStart) % _maxDur;
+            marker._phaseOffset = (performance.now() - _masterStart) % loopDur(marker);
         }
         if (marker._tlInit == null) {
             marker._tlInit = {};
@@ -530,7 +555,7 @@
             marker._lastRel = 0;
             marker._recSigOpen = { left: null, right: null };
             if (_playAll) {
-                marker._phaseOffset = (performance.now() - _masterStart) % _maxDur;
+                marker._phaseOffset = (performance.now() - _masterStart) % loopDur(marker);
                 marker._lastSampleT = 0;
                 marker._samples.push({ t: 0, lat: marker._lat, lon: marker._lon, heading: marker._heading });
             } else {
@@ -551,10 +576,11 @@
         const now = performance.now();
         if (now - _masterLast >= MASTER_FRAME_MS) {
             _masterLast = now;
-            const elapsed = (now - _masterStart) % _maxDur;
+            // У каждой машинки/светофора — свой цикл (loopDur), общие часы (_masterStart)
             const bounds = visibleBounds(); // [[lngMin,latMin],[lngMax,latMax]] или null
             let any = false;
             placedMarkers.forEach(m => {
+                const elapsed = (now - _masterStart) % loopDur(m);
                 if (m._playing && m._isTl && m._tlRec && m._tlRec.length) {
                     applyTlAt(m, elapsed);
                     any = true;
@@ -760,6 +786,7 @@
         marker._endTrim = undefined;
         marker._phaseOffset = 0;
         marker._signals = [];
+        marker._loopMs = undefined;
         if (_scrubOpen) buildScrubRows(marker);
         updatePlayAllBtn();
     }
@@ -793,7 +820,7 @@
             row.addEventListener('click', e => {
                 if (e.target && e.target.closest &&
                     (e.target.closest('.scrub-sigtrack') || e.target.closest('.scrub-sigsec') ||
-                     e.target.closest('.scrub-confirm-btn'))) return;
+                     e.target.closest('.scrub-confirm-btn') || e.target.closest('.scrub-loop'))) return;
                 highlightCar(marker, true);
             });
             const sigsec = document.createElement('div');
@@ -802,6 +829,31 @@
             timeWrap.className = 'scrub-timewrap';
             timeWrap.appendChild(scrubThumb);
             timeWrap.appendChild(scrubTime);
+            // Поле длины цикла машинки (секунды). Пустое или 0 — вернуть общий период
+            const loopWrap = document.createElement('div');
+            loopWrap.className = 'scrub-loop';
+            const loopLabel = document.createElement('span');
+            loopLabel.textContent = 'Цикл';
+            const loopInput = document.createElement('input');
+            loopInput.type = 'number';
+            loopInput.min = '0.1';
+            loopInput.step = '0.1';
+            loopInput.value = (((marker._loopMs != null && marker._loopMs > 0) ? marker._loopMs : loopDefaultMs()) / 1000).toFixed(1);
+            const loopUnit = document.createElement('span');
+            loopUnit.textContent = 'с';
+            loopWrap.appendChild(loopLabel);
+            loopWrap.appendChild(loopInput);
+            loopWrap.appendChild(loopUnit);
+            timeWrap.appendChild(loopWrap);
+            loopInput.addEventListener('input', () => {
+                const v = parseFloat(loopInput.value);
+                marker._loopMs = (isFinite(v) && v > 0) ? Math.round(v * 1000) : undefined;
+                refresh();
+            });
+            loopInput.addEventListener('change', () => {
+                const v = parseFloat(loopInput.value);
+                loopInput.value = (isFinite(v) && v > 0 ? v : loopMsOf(marker) / 1000).toFixed(1);
+            });
             // Полоса времени в стиле полос поворотников: часовая песочница + трек
             const timeLine = document.createElement('div');
             timeLine.className = 'scrub-sigline scrub-timeline';
@@ -975,11 +1027,14 @@
             scrubBody.appendChild(row);
 
             const refresh = () => {
-                const p1 = (marker._startTrim / dur) * 100;
-                const p2 = (marker._endTrim / dur) * 100;
+                const st = marker._startTrim;
+                // Воспроизводится только первая `цикл` секунд записи — полоса и текст их показывают
+                const en = Math.max(st, Math.min(marker._endTrim, st + loopMsOf(marker)));
+                const p1 = (st / dur) * 100;
+                const p2 = (en / dur) * 100;
                 active.style.left = p1 + '%';
                 active.style.width = (p2 - p1) + '%';
-                scrubTime.textContent = fmtTime(marker._startTrim) + '–' + fmtTime(marker._endTrim);
+                scrubTime.textContent = fmtTime(st) + '–' + fmtTime(en);
             };
             scrubTo(marker, marker._startTrim);
             refresh();
