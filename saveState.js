@@ -178,9 +178,12 @@
     function pokeCamera() {
         try {
             if (!map || !map.zoom || !map.center) return;
+            const az = (map.azimuth != null) ? map.azimuth : 0;
+            const cam = { azimuth: az, duration: 0 };
             const exact = { center: [map.center[0], map.center[1]], zoom: map.zoom, duration: 0 };
-            map.update({ location: { center: exact.center, zoom: exact.zoom + 0.0001, duration: 0 } });
-            map.update({ location: exact });
+            // camera передаётся явно, иначе обновление location сбрасывает азимут в 0 (север наверх)
+            map.update({ location: { center: exact.center, zoom: exact.zoom + 0.0001, duration: 0 }, camera: cam });
+            map.update({ location: exact, camera: cam });
         } catch (e) {}
     }
 
