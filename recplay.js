@@ -113,7 +113,7 @@
         }
         .scrub-wait {
             position:absolute; top:2px; bottom:2px; border-radius:4px;
-            background:rgba(255,255,255,0.06); pointer-events:none;
+            background:rgba(255,255,255,0.10); pointer-events:none;
         }
         .scrub-empty { padding:24px 12px; font-size:15px; color:rgba(255,255,255,0.55); text-align:center; }
         /* Красная кнопка удаления записи внизу шторки */
@@ -155,6 +155,10 @@
         .sig-h {
             position:absolute; top:0; bottom:0; width:10px; background:rgba(255,255,255,0.9);
             cursor:ew-resize; touch-action:none; z-index:1;
+            pointer-events:auto;
+        }
+        .sig-h::before {
+            content:''; position:absolute; top:-7px; bottom:-7px; left:-9px; right:-9px;
         }
         .sig-h.sig-h-s { left:0; border-radius:4px 0 0 4px; }
         .sig-h.sig-h-e { right:0; border-radius:0 4px 4px 0; }
@@ -892,61 +896,90 @@
             timeLine.appendChild(timeTrack);
             row.appendChild(timeWrap);
             row.appendChild(timeLine);
-            // ---- Ползунок времени: ось = длительность записи [0..dur] (как линии поворотников).
-            //      Зелёный = проигрываемый интервал [startTrim..endTrim], затемнения — отрезанные части.
-            //      Цикл из поля «Цикл» сюда не подмешивается — ручки точно следуют за пальцем. ----
+            // ---- Ползунок времени: ось = полный цикл машинки [0..loop].
+            //      Зелёный = движение, на оси цикла проходит интервал
+            //      [phaseOffset+startTrim .. phaseOffset+endTrim] (все величины в мс).
+            //      Затемнённые зоны слева/справа = ожидание: до начала движения и простой до конца цикла.
+            //      Ручки правят startTrim/endTrim (мс записи), координаты пересчитываются в цикл-мс. ----
             let tDrag = null;
             const MINTRY = 150; // минимальная длина интервала, мс (0.15с)
-            const msAt = (rect, cx) => {
-                if (!rect.width) return dur / 2;
-                return Math.max(0, Math.min(dur, (cx - rect.left) / rect.width * dur));
+            const msAt = (rect, loop, cx) => {
+                if (!rect.width) return loop / 2;
+                return Math.max(0, Math.min(loop, (cx - rect.left) / rect.width * loop));
             };
-            timeTrack.addEventListener('pointerdown', e => {
-                e.stopPropagation();
-                const rect = timeTrack.getBoundingClientRect();
-                if (!rect.width) return;
-                const st = marker._startTrim;
-                const en = Math.min(marker._endTrim != null ? marker._endTrim : dur, dur);
-                const sx = rect.left + (st / dur) * rect.width;
-                const ex = rect.left + (en / dur) * rect.width;
-                const edge = 24;
-                const ds = Math.abs(e.clientX - sx);
-                const de = Math.abs(e.clientX - ex);
-                let mode = null;
-                if (ds <= edge && de <= edge) mode = ds <= de ? 's' : 'e';
-                else if (ds <= edge) mode = 's';
-                else if (de <= edge) mode = 'e';
-                if (!mode) {
-                    // тап мимо ручек — только предпросмотр позиции машинки, тримы не меняем
-                    scrubTo(marker, msAt(rect, e.clientX) + (marker._phaseOffset || 0));
-                    return;
-                }
-                tDrag = { mode, en };
-                try { timeTrack.setPointerCapture(e.pointerId); } catch (_) {}
-            });
-            timeTrack.addEventListener('pointermove', e => {
+            // Общий обработчик drag: какой край тянут — решает tDrag.mode из pointerdown
+            // (элемент ручки), а не позиция пальца в момент нажатия.
+            const timeDragMove = e => {
                 if (!tDrag) return;
                 const rect = timeTrack.getBoundingClientRect();
                 if (!rect.width) return;
-                const el = msAt(rect, e.clientX);
+                const c = msAt(rect, tDrag.loop, e.clientX); // цикл-мс под пальцем
+                const et = Math.min(marker._endTrim != null ? marker._endTrim : dur, dur);
                 if (tDrag.mode === 's') {
-                    // Левая ручка обрезает начало записи: левый край идёт за пальцем, не дальше end-MINTRY
-                    marker._startTrim = Math.max(0, Math.min(el, tDrag.en - MINTRY));
+                    marker._startTrim = Math.max(0, Math.min(c - tDrag.ph, et - MINTRY));
                     scrubTo(marker, marker._startTrim);
                 } else {
-                    // Правая ручка обрезает конец записи: правый край идёт за пальцем, не левее start+MINTRY
-                    marker._endTrim = Math.max(marker._startTrim + MINTRY, Math.min(el, dur));
+                    marker._endTrim = Math.max(marker._startTrim + MINTRY, Math.min(c - tDrag.ph, dur));
                     scrubTo(marker, marker._endTrim);
                 }
                 refresh();
-            });
-            const endTimeDrag = e => {
+            };
+            const timeDragEnd = e => {
                 if (!tDrag) return;
-                try { if (timeTrack.hasPointerCapture && timeTrack.hasPointerCapture(e.pointerId)) timeTrack.releasePointerCapture(e.pointerId); } catch (_) {}
+                try {
+                    const hold = tDrag.el;
+                    if (hold && hold.hasPointerCapture && hold.hasPointerCapture(e.pointerId)) hold.releasePointerCapture(e.pointerId);
+                } catch (_) {}
                 tDrag = null;
             };
-            timeTrack.addEventListener('pointerup', endTimeDrag);
-            timeTrack.addEventListener('pointercancel', endTimeDrag);
+            const beginTimeDrag = (mode, hold, e, loop, ph) => {
+                tDrag = { mode, loop, ph, el: hold };
+                try { hold.setPointerCapture(e.pointerId); } catch (_) {}
+            };
+            // Ручки — самостоятельные элементы: палец на правой ручке ВСЕГДА двигает правый край.
+            const grabHandle = (mode, hold, e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const rect = timeTrack.getBoundingClientRect();
+                if (!rect.width) return;
+                beginTimeDrag(mode, hold, e, loopMsOf(marker), marker._phaseOffset || 0);
+            };
+            actH0.addEventListener('pointerdown', e => grabHandle('s', actH0, e));
+            actH1.addEventListener('pointerdown', e => grabHandle('e', actH1, e));
+            actH0.addEventListener('pointermove', timeDragMove);
+            actH1.addEventListener('pointermove', timeDragMove);
+            actH0.addEventListener('pointerup', timeDragEnd);
+            actH1.addEventListener('pointerup', timeDragEnd);
+            actH0.addEventListener('pointercancel', timeDragEnd);
+            actH1.addEventListener('pointercancel', timeDragEnd);
+            // Тап по треку мимо ручек — прыгнуть к ближайшей ручке (стандарт двойного слайдера);
+            // очевидный тап вдалеке от ручек — только предпросмотр, тримы не меняем.
+            timeTrack.addEventListener('pointerdown', e => {
+                e.stopPropagation();
+                if (e.target && e.target.closest('.sig-h')) return; // ручки ловят сами
+                const rect = timeTrack.getBoundingClientRect();
+                if (!rect.width) return;
+                const loop = loopMsOf(marker);
+                const ph = marker._phaseOffset || 0;
+                const st = marker._startTrim;
+                const et = Math.min(marker._endTrim != null ? marker._endTrim : dur, dur);
+                const gL = Math.min(loop, ph + st);
+                const gR = Math.min(loop, ph + et);
+                const sx = rect.left + (gL / loop) * rect.width;
+                const ex = rect.left + (gR / loop) * rect.width;
+                const ds = Math.abs(e.clientX - sx);
+                const de = Math.abs(e.clientX - ex);
+                const near = 16;
+                if (ds <= near || de <= near) {
+                    // рядом с ручкой (но не на ней) — берём ближайшую и передаём ей жест
+                    beginTimeDrag(ds <= de ? 's' : 'e', timeTrack, e, loop, ph);
+                } else {
+                    scrubTo(marker, msAt(rect, loop, e.clientX));
+                }
+            });
+            timeTrack.addEventListener('pointermove', timeDragMove);
+            timeTrack.addEventListener('pointerup', timeDragEnd);
+            timeTrack.addEventListener('pointercancel', timeDragEnd);
 
             // ---- редактор поворотников (2 линии, всегда раскрыты) ----
             const attachSigTrack = side => {
@@ -1065,17 +1098,21 @@
             scrubBody.appendChild(row);
 
             const refresh = () => {
+                const loop = loopMsOf(marker);
+                const ph = marker._phaseOffset || 0;
                 const st = marker._startTrim;
-                // Зелёный отрезок = проигрываемый интервал записи [st..endTrim], ось = длительность записи
-                const en = Math.max(st, Math.min(marker._endTrim != null ? marker._endTrim : dur, dur));
-                const p1 = (st / dur) * 100;
-                const p2 = (en / dur) * 100;
+                // Движение занимает на оси цикла [ph+st .. ph+et], где et=endTrim; всё clamped по длине цикла
+                const et = Math.min(marker._endTrim != null ? marker._endTrim : dur, dur);
+                const gL = Math.min(loop, ph + st);
+                const gR = Math.min(loop, ph + et);
+                const p1 = (gL / loop) * 100;
+                const p2 = (gR / loop) * 100;
                 active.style.left = p1 + '%';
                 active.style.width = Math.max(0, p2 - p1) + '%';
                 waitStart.style.width = p1 + '%';
                 waitEnd.style.left = Math.min(100, p2) + '%';
                 waitEnd.style.width = Math.max(0, 100 - p2) + '%';
-                scrubTime.textContent = fmtTime(st) + '–' + fmtTime(en) + ' (' + fmtTime(en - st) + ')';
+                scrubTime.textContent = fmtTime(st) + '–' + fmtTime(et) + ' (' + fmtTime(et - st) + ')';
             };
             scrubTo(marker, marker._startTrim);
             refresh();
