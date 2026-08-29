@@ -2207,36 +2207,38 @@ function initCustomPinchRotate() {
     }
 
     function handleStartParam() {
-        const wa = window.Telegram && window.Telegram.WebApp;
-        const param = wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param;
-        if (!param) return;
-        const decoded = b64urlDecode(param);
-        if (!decoded) return;
-        const idx = decoded.indexOf(':');
-        if (idx === -1) return;
-        const ownerUserId = decoded.slice(0, idx);
-        const sceneName = decoded.slice(idx + 1);
-        if (!ownerUserId || !sceneName) return;
-        // При запуске по ссылке с параметром сразу включаем режим прозрачности
-        document.body.classList.add('controls-hidden');
-        if (!window.loadSharedScene) return;
-        // Ждём готовности карты
-        const doLoad = () => {
-            window.loadSharedScene(ownerUserId, sceneName).then(() => {
-                // Сцена применена — принудительно отключаем перетаскивание маркеров/текста
-                if (document.body.classList.contains('controls-hidden')) {
-                    placedMarkers.forEach(m => m.update({ draggable: false }));
-                    textItems.forEach(t => t.update({ draggable: false }));
-                }
-            });
-        };
-        if (window.map) {
-            doLoad();
-        } else {
-            const t = setInterval(() => {
-                if (window.map) { clearInterval(t); doLoad(); }
-            }, 500);
-        }
+        try {
+            const wa = window.Telegram && window.Telegram.WebApp;
+            const param = wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param;
+            if (!param) return;
+            const decoded = b64urlDecode(param);
+            if (!decoded) return;
+            const idx = decoded.indexOf(':');
+            if (idx === -1) return;
+            const ownerUserId = decoded.slice(0, idx);
+            const sceneName = decoded.slice(idx + 1);
+            if (!ownerUserId || !sceneName) return;
+            if (!window.loadSharedScene) { setTimeout(handleStartParam, 100); return; }
+            // При запуске по ссылке с параметром сразу включаем режим прозрачности
+            if (document.body) document.body.classList.add('controls-hidden');
+            // Ждём готовности карты
+            const doLoad = () => {
+                window.loadSharedScene(ownerUserId, sceneName).then(() => {
+                    // Сцена применена — принудительно отключаем перетаскивание маркеров/текста
+                    if (document.body && document.body.classList.contains('controls-hidden')) {
+                        if (Array.isArray(placedMarkers)) placedMarkers.forEach(m => m.update({ draggable: false }));
+                        if (Array.isArray(textItems)) textItems.forEach(t => t.update({ draggable: false }));
+                    }
+                });
+            };
+            if (map) {
+                doLoad();
+            } else {
+                const t = setInterval(() => {
+                    if (map) { clearInterval(t); doLoad(); }
+                }, 500);
+            }
+        } catch (e) { /* безвредно: ссылка с параметром не должна ломать запуск */ }
     }
     handleStartParam();
 })();
