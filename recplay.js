@@ -251,6 +251,7 @@
     }
 
     function hasMovement(m) {
+        if (m._isTl) return false; // светофоры не двигаются — только лампы
         const s = m._samples;
         if (!s || s.length < 2) return false;
         const p = s[0];
@@ -265,6 +266,16 @@
         return placedMarkers.filter(hasMovement);
     }
 
+    // Есть ли у светофора запись переключений ламп
+    function hasTlRec(m) {
+        return !!(m._isTl && m._tlRec && m._tlRec.length);
+    }
+
+    // Светофоры с записью ламп, ещё не включённые в воспроизведение
+    function tlRecMarkers() {
+        return placedMarkers.filter(m => !m._playing && hasTlRec(m));
+    }
+
     function startTrim(m) { return m._startTrim || 0; }
 
     function endTrim(m) {
@@ -273,6 +284,9 @@
     }
 
     function endPhase(m) {
+        if (m._isTl && m._tlRec && m._tlRec.length) {
+            return (m._phaseOffset || 0) + m._tlRec[m._tlRec.length - 1].t;
+        }
         if (!m._samples || m._samples.length < 2) return 0;
         return (m._phaseOffset || 0) + (endTrim(m) - startTrim(m));
     }
@@ -347,6 +361,28 @@
         else updatePicMarker(marker);
     }
 
+    // Применить состояние ламп светофора на момент времени elapsed (мс) цикла:
+    // стартуем из состояния на момент записи (_tlInit) и проигрываем переключения.
+    function applyTlAt(marker, elapsed) {
+        const recs = marker._tlRec;
+        if (!recs || !recs.length) return;
+        const e = elapsed - (marker._phaseOffset || 0);
+        const MAIN = ['red', 'yellow', 'green'];
+        const st = { red: false, yellow: false, green: false, left: false, right: false };
+        const init = marker._tlInit;
+        if (init) for (const k in init) st[k] = !!init[k];
+        for (const r of recs) {
+            if (r.t > e) break;
+            st[r.key] = !!r.on;
+            if (r.on && MAIN.indexOf(r.key) !== -1) {
+                MAIN.forEach(k => { if (k !== r.key) st[k] = false; });
+            }
+        }
+        for (const k in st) {
+            if (st[k] !== marker._lampState[k] && window.tlSetLamp) window.tlSetLamp(marker, k, st[k]);
+        }
+    }
+
 
     // ---- Запись ----
     // Частота сэмплов: ~10 кадров/с (100 мс), чтобы уменьшить размер записи.
@@ -356,7 +392,7 @@
         if (!_recOn) { _recRaf = null; return; }
         const now = performance.now();
         placedMarkers.forEach(m => {
-            if (!m._recActive) return;
+            if (!m._recActive || m._isTl) return; // светофоры не сэмплируются по движению
             let t;
             if (_playAll) {
                 const phase = (now - _masterStart) % _maxDur;
@@ -418,6 +454,23 @@
         marker._recSigOpen = undefined;
     }
 
+    // Запись переключений ламп светофора: пока активен REC, каждое нажатие на лампу
+    // фиксируется в marker._tlRec как {t, key, on}. Хук вызывается из setLamp
+    // (trafficlights.js), т.е. ловит все пути изменения ламп.
+    function recordTlLamp(marker, key, on) {
+        if (!_recOn || !marker || !marker._isTl || marker._playing) return;
+        if (_playAll && marker._phaseOffset == null) {
+            marker._phaseOffset = (performance.now() - _masterStart) % _maxDur;
+        }
+        if (marker._tlInit == null) {
+            marker._tlInit = {};
+            ['red', 'yellow', 'green', 'left', 'right'].forEach(k => marker._tlInit[k] = !!marker._lampState[k]);
+        }
+        marker._tlRec = marker._tlRec || [];
+        marker._tlRec.push({ t: Math.round(Math.max(0, recSignalTime(marker))), key: key, on: !!on });
+    }
+    window.onTlLampChange = recordTlLamp;
+
     // Оборачиваем переключение поворотников
     const origSetBlink = window.setBlink;
     const origSetHazard = window.setHazard;
@@ -458,6 +511,10 @@
             stopRec();
         } else {
             placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; });
+            // Новая сессия записи: у светофоров обнуляем запись ламп (движение не пишется)
+            placedMarkers.forEach(m => {
+                if (m._isTl && !m._playing) { m._tlRec = []; m._tlInit = null; m._phaseOffset = 0; }
+            });
             _recOn = true;
             _recStart = performance.now();
             // Поворотники, уже включённые до старта записи, пишем с начала сессии
@@ -479,7 +536,7 @@
         if (!markerEl) return;
         if (t.closest('.blink-btn') || t.closest('.delete-btn')) return;
         const marker = placedMarkers.find(m => m._select === markerEl);
-        if (marker && !marker._recActive) {
+        if (marker && !marker._recActive && !marker._isTl) {
             marker._recActive = true;
             marker._prevSamples = marker._samples;
             marker._samples = [];
@@ -520,7 +577,10 @@
             const bounds = visibleBounds(); // [[lngMin,latMin],[lngMax,latMax]] или null
             let any = false;
             placedMarkers.forEach(m => {
-                if (m._playing && m._samples && m._samples.length >= 2) {
+                if (m._playing && m._isTl && m._tlRec && m._tlRec.length) {
+                    applyTlAt(m, elapsed);
+                    any = true;
+                } else if (m._playing && m._samples && m._samples.length >= 2) {
                     sampleAt(m, elapsed);
                     if (!bounds || inBounds(bounds, m._lon, m._lat)) applyPosition(m);
                     any = true;
@@ -565,11 +625,12 @@
         if (_playAll) return;
         if (_recOn) stopRec();
         hideAllRecBtns();
-        const targets = playables();
+        const targets = playables().concat(tlRecMarkers());
         if (!targets.length) return;
         targets.forEach(m => {
             m._playing = true;
             m._savedBlink = m._blinkSide;
+            if (m._isTl && m._lampState) m._savedLamps = Object.assign({}, m._lampState);
             m.update({ draggable: false });
             m._select.style.pointerEvents = 'none';
         });
@@ -589,9 +650,15 @@
         placedMarkers.forEach(m => {
             if (!m._playing) return;
             m._playing = false;
-            sampleAt(m, m._phaseOffset || 0); // вернуть на отсечённое начало
-            applyPosition(m);
-            applySignal(m, m._savedBlink);    // вернуть ручной сигнал
+            if (m._isTl) {
+                const L = m._savedLamps;
+                if (L) for (const k in L) { if (window.tlSetLamp) window.tlSetLamp(m, k, L[k]); }
+                m._savedLamps = undefined;
+            } else {
+                sampleAt(m, m._phaseOffset || 0); // вернуть на отсечённое начало
+                applyPosition(m);
+                applySignal(m, m._savedBlink);    // вернуть ручной сигнал
+            }
             m._select.style.pointerEvents = '';
             m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
         });
@@ -608,10 +675,18 @@
                 m.update({ draggable: false });
                 m._select.style.pointerEvents = 'none';
                 changed = true;
+            } else if (m._isTl && !m._playing && hasTlRec(m)) {
+                m._playing = true;
+                m._savedBlink = m._blinkSide;
+                if (m._lampState) m._savedLamps = Object.assign({}, m._lampState);
+                m.update({ draggable: false });
+                m._select.style.pointerEvents = 'none';
+                changed = true;
             }
         });
         if (changed) {
-            _maxDur = maxDurOf(placedMarkers.filter(m => m._playing && m._samples && m._samples.length >= 2));
+            _maxDur = maxDurOf(placedMarkers.filter(m =>
+                m._playing && (m._isTl ? hasTlRec(m) : (m._samples && m._samples.length >= 2))));
         }
     }
 
@@ -1016,7 +1091,7 @@
 
     function updatePlayAllBtn() {
         if (!playAllBtn) return;
-        const any = playables().length > 0;
+        const any = playables().length > 0 || placedMarkers.some(hasTlRec);
         const hidden = document.body.classList.contains('controls-hidden');
         if (hidden && any && !_playAll) {
             playAllBtn.style.display = 'flex';

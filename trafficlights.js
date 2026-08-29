@@ -222,6 +222,7 @@
             MAIN.forEach(k => { if (k !== key && marker._lampState[k]) applyLamp(marker, k, false); });
         }
         applyLamp(marker, key, on);
+        if (window.onTlLampChange) window.onTlLampChange(marker, key, on);
     }
     // Доступ из pad.html: мини-светофор в панели активного светофора
     window.tlSetLamp = setLamp;
@@ -353,7 +354,6 @@
         if (window.setupTopDrag) setupTopDrag(marker);
         setupTlLongPress(marker);
         setupLampTaps(marker);
-        if (window.attachCarBadge) window.attachCarBadge(marker);
         updatePicMarker(marker);
         map.addChild(marker);
         placedMarkers.push(marker);
