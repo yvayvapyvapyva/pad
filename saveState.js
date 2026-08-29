@@ -175,15 +175,22 @@
     // Защита от рассинхрона растрового слоя после перелёта: эпсилон-изменение zoom
     // заставляет WebGL-слой растра гарантированно переотрисовать кадр на финальном
     // LOD (закрывает iOS-случай «застрявшего» кадра после смены камеры).
-    function pokeCamera() {
+    //
+    // ВАЖНО: location и camera нельзя объединять в один map.update — обработка
+    // location в этой версии API сбрасывает азимут (север наверх), даже если camera
+    // передана в том же запросе. Поэтому азимут всегда ставится ПОСЛЕ location
+    // отдельным camera-only запросом. Целевой азимут передаём в poke из applyScene
+    // (не читаем map.azimuth — к моменту poke он уже может быть сброшен в 0).
+    function pokeCamera(az) {
         try {
             if (!map || !map.zoom || !map.center) return;
-            const az = (map.azimuth != null) ? map.azimuth : 0;
-            const cam = { azimuth: az, duration: 0 };
+            if (az == null) az = (map.azimuth != null) ? map.azimuth : 0;
             const exact = { center: [map.center[0], map.center[1]], zoom: map.zoom, duration: 0 };
-            // camera передаётся явно, иначе обновление location сбрасывает азимут в 0 (север наверх)
-            map.update({ location: { center: exact.center, zoom: exact.zoom + 0.0001, duration: 0 }, camera: cam });
-            map.update({ location: exact, camera: cam });
+            // Эпсилон-изменение zoom форсирует перерисовку растра. Обработка location
+            // сбрасывает азимут, поэтому возвращаем его ОТДЕЛЬНЫМ camera-only запросом В КОНЦЕ.
+            map.update({ location: { center: exact.center, zoom: exact.zoom + 0.0001, duration: 0 } });
+            map.update({ location: exact });
+            map.update({ camera: { azimuth: az, duration: 0 } });
         } catch (e) {}
     }
 
@@ -223,13 +230,16 @@
             try {
                 const hasCenter = Array.isArray(data.camera.center) && data.camera.center.length >= 2 && data.camera.zoom != null;
                 const hasAz = data.camera.azimuth != null;
+                const az = hasAz ? data.camera.azimuth : 0;
                 if (hasCenter || hasAz) {
-                    map.update({
-                        location: hasCenter ? { center: [data.camera.center[0], data.camera.center[1]], zoom: data.camera.zoom, duration: SCENE_FLY_MS } : undefined,
-                        camera: hasAz ? { azimuth: data.camera.azimuth, duration: SCENE_FLY_MS } : undefined
-                    });
+                    // Перелёт к камере сцены. location и camera НЕ объединяем в один
+                    // map.update: в этой версии API обработка location сбрасывает азимут,
+                    // поэтому азимут ставятся отдельным camera-only запросом ПОСЛЕ location.
+                    if (hasCenter) map.update({ location: { center: [data.camera.center[0], data.camera.center[1]], zoom: data.camera.zoom, duration: SCENE_FLY_MS } });
+                    if (hasAz) map.update({ camera: { azimuth: az, duration: SCENE_FLY_MS } });
                     clearTimeout(scenePokeTimer);
-                    scenePokeTimer = setTimeout(pokeCamera, SCENE_FLY_MS + 150);
+                    // Защита от рассинхрона растра + гарантированный возврат азимута сцены.
+                    scenePokeTimer = setTimeout(() => pokeCamera(hasAz ? az : null), SCENE_FLY_MS + 150);
                 }
             } catch (e) {}
         }
