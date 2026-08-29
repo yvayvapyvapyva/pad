@@ -1034,7 +1034,7 @@
                 const p2 = (en / dur) * 100;
                 active.style.left = p1 + '%';
                 active.style.width = (p2 - p1) + '%';
-                scrubTime.textContent = fmtTime(st) + '–' + fmtTime(en);
+                scrubTime.textContent = fmtTime(st) + '–' + fmtTime(en) + ' (' + fmtTime(en - st) + ')';
             };
             scrubTo(marker, marker._startTrim);
             refresh();
