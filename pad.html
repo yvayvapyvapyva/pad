@@ -2282,6 +2282,7 @@ document.addEventListener('pointerdown', (e) => {
     const t = e.target;
     if (!t || !t.closest) return;
     if (t.closest('.scene-io-modal')) return; // клики внутри шторки её не закрывают
+    if (t.closest('#saveBtn')) return; // кнопка менеджера сама переключает шторку
     if (t.closest('.fab') || t.closest('#pddBtn') || t.closest('#savePddGroup')) {
         window.closeSceneManager();
     }

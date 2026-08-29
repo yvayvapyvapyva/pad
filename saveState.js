@@ -127,6 +127,7 @@
 
     // ---- Открыть/закрыть менеджер ----
     let managerEl = null;
+    let loadingScene = false;
 
     function closeManager() {
         if (managerEl) {
@@ -634,6 +635,10 @@
             () => deleteScene(scene, statusEl)));
         main.appendChild(btns);
         row.appendChild(main);
+        const loading = document.createElement('div');
+        loading.className = 'scene-io-item-loading';
+        loading.innerHTML = '<span class="scene-io-spinner"></span><span>Загрузка сцены…</span>';
+        row.appendChild(loading);
         return row;
     }
 
@@ -691,20 +696,32 @@
     }
 
     async function loadScene(scene, statusEl) {
+        if (loadingScene) return;
+        loadingScene = true;
+        const rows = managerEl ? managerEl.querySelectorAll('.scene-io-item') : [];
+        rows.forEach(r => { r.classList.add('disabled'); if (r.querySelector('.scene-io-item-name').textContent === scene.name) r.classList.add('loading'); });
+        statusEl.classList.add('busy');
+        statusEl.textContent = 'Загрузка: ' + scene.name + '…';
         try {
             const got = await api('GET', { query: { name: scene.name } });
             let data = got.data;
             if (typeof data === 'string') data = JSON.parse(data);
             applyScene(data || got, scene.name);
-            if (managerEl) {
-                const rows = managerEl.querySelectorAll('.scene-io-item');
-                rows.forEach(r => r.classList.toggle('active', r.querySelector('.scene-io-item-name').textContent === scene.name));
-            }
+            rows.forEach(r => {
+                const nm = r.querySelector('.scene-io-item-name').textContent;
+                r.classList.toggle('active', nm === scene.name);
+                r.classList.remove('loading');
+            });
             statusEl.classList.remove('busy');
             statusEl.textContent = 'Загружено: ' + scene.name;
+            setTimeout(closeManager, 1000);
         } catch (e) {
+            rows.forEach(r => r.classList.remove('loading'));
             statusEl.classList.remove('busy');
             statusEl.textContent = 'Ошибка: ' + e.message;
+        } finally {
+            loadingScene = false;
+            rows.forEach(r => r.classList.remove('disabled'));
         }
     }
 
@@ -850,6 +867,10 @@
             + '.scene-io-item-meta{font-size:12px;color:rgba(255,255,255,0.35);margin-top:3px;}'
             + '.scene-io-item.active .scene-io-item-meta{color:rgba(48,209,88,0.7);}'
             + '.scene-io-item-btns{display:flex;gap:6px;flex-shrink:0;}'
+            + '.scene-io-item-loading{display:none;align-items:center;gap:8px;font-size:13px;color:rgba(255,255,255,0.7);padding:4px 0 2px;}'
+            + '.scene-io-item.loading .scene-io-item-loading{display:flex;}'
+            + '.scene-io-item.disabled{opacity:0.55;pointer-events:none;}'
+            + '.scene-io-item.loading{border-color:rgba(255,214,10,0.5);}'
             + '.scene-io-item-btn{width:40px;height:40px;border:none;border-radius:10px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;padding:0;user-select:none;-webkit-user-select:none;transition:all .15s ease;}'
             + '.scene-io-item-btn:active{background:rgba(255,255,255,0.15);transform:scale(0.9);}'
             + '.scene-io-modal-save{z-index:9600;}'
