@@ -1581,7 +1581,7 @@ function initCustomPinchRotate() {
     let center = await getPos();
     map = new YMap(document.getElementById('map'), {
         location: { center: center || [43.9968, 56.3269], zoom: 19 },
-        zoomRounding: 'smooth',
+        zoomRounding: 'snap',
         behaviors: appBehaviors
     });
     map.addChild(new YMapDefaultSatelliteLayer({}));
