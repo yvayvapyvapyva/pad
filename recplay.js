@@ -510,7 +510,16 @@
         if (_recOn) {
             stopRec();
         } else {
-            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; });
+            placedMarkers.forEach(m => {
+                m._recActive = false;
+                m._prevSamples = undefined;
+                m._lastRel = 0;
+                m._lastSampleT = undefined;
+                // Новая сессия записи: поворотники начинаются с нуля. Если не сбрасывать,
+                // при повторной записи той же машинки старые отрезки сигналов остаются
+                // в _signals и накладываются на новые в панели записей (таймлайны съезжают).
+                if (!m._isTl) { m._signals = []; m._recSigOpen = undefined; }
+            });
             // Новая сессия записи: у светофоров обнуляем запись ламп (движение не пишется)
             placedMarkers.forEach(m => {
                 if (m._isTl && !m._playing) { m._tlRec = []; m._tlInit = null; m._phaseOffset = 0; }
