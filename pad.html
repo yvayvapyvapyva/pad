@@ -873,7 +873,7 @@ function serializeScene() {
             lat: m._lat, lon: m._lon,
             heading: m._heading,
             leg: !!m._leg,
-            rec: (m._samples && m._samples.length) ? { format: 2, samples: packRecSamples(m._samples), st: m._startTrim || 0, et: (m._endTrim != null ? m._endTrim : m._samples[m._samples.length - 1].t), po: m._phaseOffset || 0, sig: m._signals || [], loop: (m._loopMs && m._loopMs > 0) ? m._loopMs : undefined } : null
+            rec: (m._samples && m._samples.length) ? { format: 2, samples: packRecSamples(m._samples), st: m._startTrim || 0, et: (m._endTrim != null ? m._endTrim : m._samples[m._samples.length - 1].t), po: m._phaseOffset || 0, sig: m._signals || [], loop: (m._loopMs && m._loopMs > 0) ? m._loopMs : undefined, tt: (m._timedTexts || []).map(t => ({ id: t.id, lat: t.lat, lon: t.lon, text: t.text || '', t0: t.t0, t1: t.t1 })) } : null
         }))
     };
 }
@@ -932,6 +932,12 @@ function restoreScene(snap) {
                 m._phaseOffset = d.rec.po;
                 m._signals = d.rec.sig;
                 m._loopMs = (d.rec.loop && d.rec.loop > 0) ? d.rec.loop : undefined;
+                if (Array.isArray(d.rec.tt)) {
+                    m._timedTexts = d.rec.tt;
+                    if (window.buildTimedTextDom) {
+                        d.rec.tt.forEach(t => window.buildTimedTextDom(m, t));
+                    }
+                }
             }
             if (d.leg && m._isTl && window.toggleTlLeg) window.toggleTlLeg(m);
     });
@@ -1608,6 +1614,10 @@ function initCustomPinchRotate() {
 
     map.addChild(new YMapListener({
         onPointerDown: (_, event) => {
+            if (window.onMapTap && typeof window.onMapTap === 'function') {
+                const handled = window.onMapTap(event);
+                if (handled) return;
+            }
             if (anyPanelOpen()) {
                 placedMarkers.forEach(m => { if (m._panelOpen) setPanel(m, false); });
                 return;

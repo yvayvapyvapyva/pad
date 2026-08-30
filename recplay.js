@@ -167,6 +167,66 @@
             border-radius:50%; background:rgba(255,69,58,0.95); color:#fff; font-size:9px; line-height:1;
             display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:none; z-index:2;
         }
+        /* ---- Секция временных текстов в шторке записи ---- */
+        .scrub-ttsec { flex:0 0 100%; display:block; padding-top:10px; border-top:0.5px solid rgba(255,255,255,0.1); margin-top:4px; }
+        .scrub-tt-title { font-size:12px; font-weight:600; color:rgba(255,255,255,0.6); padding:0 2px 6px; }
+        .scrub-tt-add { display:flex; align-items:center; gap:6px; padding:2px 0 8px; }
+        .scrub-tt-input {
+            flex:1; min-width:0; height:36px; padding:0 12px; border-radius:9px;
+            border:0.5px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.08);
+            color:#fff; font-size:15px; outline:none; touch-action:manipulation; user-select:text; -webkit-user-select:text;
+        }
+        .scrub-tt-input:focus { border-color:#30D158; }
+        .scrub-tt-addbtn {
+            height:36px; padding:0 14px; border-radius:9px; border:none; flex-shrink:0;
+            background:rgba(48,209,88,0.9); color:#000; font-size:14px; font-weight:600; cursor:pointer; touch-action:manipulation;
+        }
+        .scrub-tt-addbtn:active { background:rgba(48,209,88,1); transform:scale(0.97); }
+        .scrub-tt-item {
+            display:flex; flex-direction:column; gap:4px; padding:8px; margin-bottom:6px;
+            border-radius:10px; background:rgba(255,255,255,0.05); border:0.5px solid rgba(255,255,255,0.08);
+        }
+        .scrub-tt-head { display:flex; align-items:center; gap:8px; }
+        .scrub-tt-text {
+            flex:1; min-width:0; font-size:13px; color:rgba(255,255,255,0.9); word-break:break-word;
+            white-space:pre-wrap; line-height:1.3;
+        }
+        .scrub-tt-text.empty { color:rgba(255,255,255,0.35); font-style:italic; }
+        .scrub-tt-del {
+            width:30px; height:30px; border-radius:8px; border:none; flex-shrink:0;
+            background:rgba(255,69,58,0.85); color:#fff; font-size:12px; cursor:pointer; touch-action:manipulation;
+        }
+        .scrub-tt-del:active { background:rgba(255,69,58,1); }
+        .scrub-tt-line { display:flex; align-items:center; gap:6px; }
+        .scrub-tt-label { flex-shrink:0; width:16px; text-align:center; font-size:13px; color:#30D158; }
+        .scrub-tttrack {
+            position:relative; flex:1; min-width:0; height:26px; border-radius:6px;
+            background:rgba(255,255,255,0.08); cursor:crosshair; touch-action:none; overflow:hidden;
+        }
+        .tt-visible {
+            position:absolute; top:2px; bottom:2px; border-radius:4px;
+            background:#30D158; opacity:0.9; pointer-events:none;
+        }
+        .tt-none { position:absolute; top:0; bottom:0; background:rgba(255,255,255,0.04); pointer-events:none; }
+        /* Маркер временной надписи на карте (не редактируется, не таскается) */
+        .timed-text { opacity:0; pointer-events:none; }
+        .timed-text.visible { opacity:1; }
+        .timed-text .text-input { background:rgba(30,30,30,0.15); color:#fff; border:1px solid rgba(255,255,255,0.9); text-shadow:0 1px 2px rgba(0,0,0,0.6); }
+        /* Подсказка при выборе места на карте */
+        #ttHint {
+            position:fixed; top:calc(12px + env(safe-area-inset-top) + var(--tg-top, 0px)); left:50%; transform:translateX(-50%);
+            z-index:9400; padding:8px 10px 8px 20px; border-radius:22px; font-size:14px; font-weight:600; color:#fff;
+            background:rgba(15,15,15,0.9); border:0.5px solid rgba(48,209,88,0.6); box-shadow:0 8px 24px rgba(0,0,0,0.4);
+            pointer-events:none; white-space:nowrap; display:none;
+        }
+        #ttHint.visible { display:flex; align-items:center; gap:10px; }
+        #ttHint.qhidden { display:none !important; }
+        .tt-hint-cancel {
+            width:28px; height:28px; border-radius:50%; border:0.5px solid rgba(255,255,255,0.25); flex-shrink:0;
+            background:rgba(255,255,255,0.12); color:#fff; font-size:13px; cursor:pointer; pointer-events:auto; touch-action:manipulation;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .tt-hint-cancel:active { background:rgba(255,255,255,0.25); }
     `;
     document.head.appendChild(style);
 
@@ -195,6 +255,14 @@
     let _scrubOpen = false;
     let _confirmMarker = null;
     let _scrubMarker = null; // машинка, для которой открыта панель записи
+
+    // ---- Временные текстовые надписи ----
+    let _ttSeq = 1;                      // генератор id
+    let _placeTextMode = false;          // идёт выбор места на карте
+    let _pendingText = null;             // { marker, text, t0 } — что ставим
+    let _ttMarkerSeq = 1;                // id DOM-метки для marker._ttEls
+    let _ttHint = null;                  // элемент подсказки
+    const MINTRY_MS = 150;               // минимальная длина интервала видимости текста, мс
 
     const scrubModal = document.createElement('div');
     scrubModal.id = 'scrubModal';
@@ -245,6 +313,21 @@
     confirmBox.appendChild(confirmBtns);
     confirmModal.appendChild(confirmBox);
     document.body.appendChild(confirmModal);
+
+    // Подсказка при выборе места на карте для текста
+    _ttHint = document.createElement('div');
+    _ttHint.id = 'ttHint';
+    const hintTxt = document.createElement('span');
+    hintTxt.textContent = 'Коснитесь карты, чтобы поставить текст';
+    const hintCancel = document.createElement('button');
+    hintCancel.className = 'tt-hint-cancel';
+    hintCancel.textContent = '✕';
+    hintCancel.title = 'Отмена';
+    hintCancel.addEventListener('pointerdown', e => e.stopPropagation());
+    hintCancel.addEventListener('click', e => { e.stopPropagation(); cancelPlaceText(); });
+    _ttHint.appendChild(hintTxt);
+    _ttHint.appendChild(hintCancel);
+    document.body.appendChild(_ttHint);
 
     // ---- Утилиты ----
     function lerpAngle(a, b, t) {
@@ -530,6 +613,7 @@
     }
 
     function toggleRec() {
+        cancelPlaceText();
         if (_recOn) {
             stopRec();
         } else {
@@ -576,6 +660,139 @@
         }
     }, true);
 
+    // ---- Временные текстовые надписи ----
+    // Каждая надпись хранится в marker._timedTexts: { id, lat, lon, text, t0, t1 }.
+    // t0/t1 — мс записи (та же шкала, что _samples/_signals). Во время воспроизведения
+    // надпись видна, когда «recording elapsed» машинки попадает в [t0, t1].
+
+    // Создать DOM-метку временной надписи (не таскается, не редактируется, скрыта).
+    window.buildTimedTextDom = function (marker, tt) {
+        if (!window.makeTextMarker) return;
+        // Синхронизировать генератор id с восстановленными надписями,
+        // чтобы новые id не пересекались с уже существующими.
+        if (tt.id && /^tt\d+$/.test(tt.id)) {
+            const n = parseInt(tt.id.slice(2), 10) + 1;
+            if (n > _ttSeq) _ttSeq = n;
+        }
+        const ta = document.createElement('div');
+        ta.className = 'text-input timed-text-input';
+        ta.textContent = tt.text || '';
+        const m = window.makeTextMarker(tt.lat, tt.lon, ta);
+        m._fixed = true;
+        m.update({ draggable: false });
+        m._select.classList.add('fixed');
+        m._select.classList.add('timed-text');
+        marker._ttEls = marker._ttEls || new Map();
+        marker._ttEls.set(tt.id, m);
+        map.addChild(m);
+        return m;
+    };
+
+    function removeTimedTextDom(marker, tt) {
+        const mm = marker._ttEls && marker._ttEls.get(tt.id);
+        if (mm) {
+            map.removeChild(mm);
+            marker._ttEls.delete(tt.id);
+        }
+    }
+
+    function removeAllTimedTextDom(marker) {
+        if (!marker._ttEls) return;
+        marker._ttEls.forEach(mm => map.removeChild(mm));
+        marker._ttEls.clear();
+    }
+
+    // Текущее «recording elapsed» машинки для заданного времени главных часов.
+    // Идентично формуле, что в sampleAt/signalAt: e = st + (elapsed - phaseOffset), clamped.
+    function recElapsedOf(marker, elapsed) {
+        const s = marker._samples;
+        if (!s || s.length < 2) return 0;
+        const st = marker._startTrim || 0;
+        const et = marker._endTrim != null ? marker._endTrim : s[s.length - 1].t;
+        let e = st + (elapsed - (marker._phaseOffset || 0));
+        if (e < st) e = st;
+        else if (e > et) e = et;
+        return e;
+    }
+
+    // Обновить видимость всех временных надписей машинки по времени главных часов.
+    // elapsed может быть null — тогда все прячем.
+    function applyTimedTexts(marker, elapsed) {
+        const e = (elapsed == null) ? null : recElapsedOf(marker, elapsed);
+        applyTimedTextsAt(marker, e);
+    }
+
+    // Обновить видимость по «recording elapsed» (мс записи) напрямую.
+    // recMs может быть null — тогда все прячем.
+    function applyTimedTextsAt(marker, recMs) {
+        const list = marker._timedTexts;
+        if (!list || !list.length || !marker._ttEls) return;
+        const e = (recMs == null) ? -1 : recMs;
+        for (const tt of list) {
+            const m = marker._ttEls.get(tt.id);
+            if (!m) continue;
+            const visible = e >= tt.t0 && e <= tt.t1;
+            m._select.classList.toggle('visible', visible);
+        }
+    }
+
+    function hideAllTimedTexts() {
+        placedMarkers.forEach(m => applyTimedTexts(m, null));
+    }
+
+    // Начать установку новой надписи тапом по карте.
+    function beginPlaceText(marker, text, t0) {
+        if (_placeTextMode) return;
+        _placeTextMode = true;
+        _pendingText = { marker, text, t0 };
+        if (_scrubOpen) closeScrubber();
+        // Скрыть панель машинки, чтобы тап не перехватывался её элементами
+        if (marker._panelOpen) setPanel(marker, false);
+        _ttHint.classList.add('visible');
+        _registerMapTap();
+    }
+
+    function cancelPlaceText() {
+        if (!_placeTextMode) return;
+        _placeTextMode = false;
+        _pendingText = null;
+        _ttHint.classList.remove('visible');
+    }
+
+    function finishPlaceText(lat, lon) {
+        const p = _pendingText;
+        if (!p) { cancelPlaceText(); return; }
+        _placeTextMode = false;
+        _pendingText = null;
+        _ttHint.classList.remove('visible');
+        const marker = p.marker;
+        marker._timedTexts = marker._timedTexts || [];
+        const tt = { id: 'tt' + (_ttSeq++), lat, lon, text: p.text, t0: p.t0, t1: p.t0 + 300 };
+        marker._timedTexts.push(tt);
+        const dom = window.buildTimedTextDom(marker, tt);
+        // Показать только что поставленную надпись, чтобы пользователь её увидел,
+        // затем скрыть (дальше видимостью управляет воспроизведение).
+        if (dom && dom._select) {
+            dom._select.classList.add('visible');
+            setTimeout(() => {
+                if (!_playAll) dom._select.classList.remove('visible');
+            }, 1200);
+        }
+        if (window.commit) window.commit();
+        highlightCar(marker, true);
+        // Вернуть шторку с обновлённым списком
+        openScrubber(marker);
+    }
+
+    function _registerMapTap() {
+        window.onMapTap = function (event) {
+            if (!_placeTextMode) return false;
+            if (!event || !event.coordinates) return true; // событие без координат — глушим
+            finishPlaceText(event.coordinates[1], event.coordinates[0]);
+            return true;
+        };
+    }
+
     // ---- Воспроизведение всех записей ----
     const MASTER_FRAME_MS = 33; // ~30fps — данные записаны ~10fps, этого достаточно для плавности
 
@@ -589,6 +806,10 @@
             let any = false;
             placedMarkers.forEach(m => {
                 const elapsed = (now - _masterStart) % loopDur(m);
+                if (m._playing && m._timedTexts && m._timedTexts.length) {
+                    applyTimedTexts(m, elapsed);
+                    any = true;
+                }
                 if (m._playing && m._isTl && m._tlRec && m._tlRec.length) {
                     applyTlAt(m, elapsed);
                     any = true;
@@ -635,6 +856,7 @@
 
     function startAll() {
         if (_playAll) return;
+        cancelPlaceText();
         if (_recOn) stopRec();
         hideAllRecBtns();
         const targets = playables().concat(tlRecMarkers());
@@ -674,6 +896,7 @@
             m._select.style.pointerEvents = '';
             m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
         });
+        hideAllTimedTexts();
         updatePlayAllBtn();
     }
 
@@ -704,6 +927,7 @@
 
     // ---- Окно перемотки (долгое нажатие на PLAY) ----
     function scrubTo(marker, t) {
+        marker._scrubT = t;
         sampleAt(marker, t - startTrim(marker) + (marker._phaseOffset || 0));
         applyPosition(marker);
     }
@@ -713,6 +937,7 @@
     }
 
     function openScrubber(marker) {
+        cancelPlaceText();
         if (_scrubOpen) { if (marker && marker !== _scrubMarker) { buildScrubRows(marker); } return; }
         if (_recOn) stopRec();
         if (_playAll) stopAll();
@@ -795,6 +1020,8 @@
         marker._phaseOffset = 0;
         marker._signals = [];
         marker._loopMs = undefined;
+        marker._timedTexts = [];
+        removeAllTimedTextDom(marker);
         if (_scrubOpen) buildScrubRows(marker);
         updatePlayAllBtn();
     }
@@ -831,7 +1058,8 @@
             row.addEventListener('click', e => {
                 if (e.target && e.target.closest &&
                     (e.target.closest('.scrub-sigtrack') || e.target.closest('.scrub-sigsec') ||
-                     e.target.closest('.scrub-confirm-btn') || e.target.closest('.scrub-loop'))) return;
+                     e.target.closest('.scrub-confirm-btn') || e.target.closest('.scrub-loop') ||
+                     e.target.closest('.scrub-tttrack') || e.target.closest('.scrub-ttsec'))) return;
                 highlightCar(marker, true);
             });
             const sigsec = document.createElement('div');
@@ -1091,9 +1319,148 @@
                 track.addEventListener('pointercancel', () => { sigDrag = null; renderSegs(); });
                 renderSegs();
             };
+            // ---- секция временных текстов: поле + добавить + список с шкалами ----
+            function attachTimedTextSection(marker, dur, row) {
+                const sec = document.createElement('div');
+                sec.className = 'scrub-ttsec';
+                const title = document.createElement('div');
+                title.className = 'scrub-tt-title';
+                title.textContent = 'Текст на карте (появляется на время)';
+                const addWrap = document.createElement('div');
+                addWrap.className = 'scrub-tt-add';
+                const inp = document.createElement('input');
+                inp.className = 'scrub-tt-input';
+                inp.type = 'text';
+                inp.placeholder = 'Введите текст…';
+                inp.spellcheck = false;
+                inp.autocomplete = 'off';
+                const addBtn = document.createElement('button');
+                addBtn.className = 'scrub-tt-addbtn';
+                addBtn.textContent = 'Добавить';
+                addWrap.appendChild(inp);
+                addWrap.appendChild(addBtn);
+                const list = document.createElement('div');
+                sec.appendChild(title);
+                sec.appendChild(addWrap);
+                sec.appendChild(list);
+                row.appendChild(sec);
+
+                addBtn.addEventListener('pointerdown', e => e.stopPropagation());
+                addBtn.addEventListener('click', () => {
+                    beginPlaceText(marker, inp.value, scrubToTime());
+                });
+
+                // Текущее время перемотки: _scrubT фиксируется в scrubTo() (мс записи).
+                function scrubToTime() {
+                    if (marker._scrubT != null) return marker._scrubT;
+                    return marker._startTrim || 0;
+                }
+
+                const mkTTItem = (tt) => {
+                    const item = document.createElement('div');
+                    item.className = 'scrub-tt-item';
+                    const head = document.createElement('div');
+                    head.className = 'scrub-tt-head';
+                    const textEl = document.createElement('div');
+                    textEl.className = 'scrub-tt-text' + ((tt.text || '').trim() ? '' : ' empty');
+                    textEl.textContent = (tt.text || '').trim() || '(пустой текст)';
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'scrub-tt-del';
+                    delBtn.textContent = '✕';
+                    delBtn.title = 'Удалить надпись';
+                    delBtn.addEventListener('pointerdown', e => e.stopPropagation());
+                    delBtn.addEventListener('click', e => {
+                        e.stopPropagation();
+                        removeTimedTextDom(marker, tt);
+                        marker._timedTexts = marker._timedTexts.filter(t => t !== tt);
+                        if (window.commit) window.commit();
+                        buildScrubRows(marker);
+                    });
+                    head.appendChild(textEl);
+                    head.appendChild(delBtn);
+                    item.appendChild(head);
+
+                    // Шкала видимости [t0,t1] на оси длительности записи dur
+                    const line = document.createElement('div');
+                    line.className = 'scrub-tt-line';
+                    const label = document.createElement('div');
+                    label.className = 'scrub-tt-label';
+                    label.textContent = 'Т';
+                    const track = document.createElement('div');
+                    track.className = 'scrub-tttrack';
+                    const none = document.createElement('div');
+                    none.className = 'tt-none';
+                    const vis = document.createElement('div');
+                    vis.className = 'tt-visible';
+                    const h0 = document.createElement('div');
+                    h0.className = 'sig-h sig-h-s';
+                    const h1 = document.createElement('div');
+                    h1.className = 'sig-h sig-h-e';
+                    vis.appendChild(h0);
+                    vis.appendChild(h1);
+                    track.appendChild(none);
+                    track.appendChild(vis);
+                    line.appendChild(label);
+                    line.appendChild(track);
+                    item.appendChild(line);
+                    list.appendChild(item);
+
+                    const place = () => {
+                        const a = Math.min(tt.t0, tt.t1), b = Math.max(tt.t0, tt.t1);
+                        const aP = Math.max(0, Math.min(100, a / dur * 100));
+                        const bP = Math.max(0, Math.min(100, b / dur * 100));
+                        vis.style.left = aP + '%';
+                        vis.style.width = Math.max(0, bP - aP) + '%';
+                    };
+                    place();
+
+                    const atFromEvent = e => {
+                        const rect = track.getBoundingClientRect();
+                        if (!rect.width) return dur / 2;
+                        return Math.max(0, Math.min(dur, (e.clientX - rect.left) / rect.width * dur));
+                    };
+                    let ttDrag = null;
+                    const dragMove = e => {
+                        if (!ttDrag) return;
+                        const t = atFromEvent(e);
+                        const edge = ttDrag.edge;
+                        if (edge === 's') tt.t0 = Math.max(0, Math.min(t, tt.t1 - MINTRY_MS));
+                        else tt.t1 = Math.min(dur, Math.max(t, tt.t0 + MINTRY_MS));
+                        place();
+                        scrubTo(marker, edge === 's' ? tt.t0 : tt.t1);
+                        applyTimedTextsAt(marker, marker._scrubT);
+                    };
+                    const dragEnd = () => { if (ttDrag) { ttDrag = null; if (window.commit) window.commit(); } };
+                    const grab = (edge, e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        ttDrag = { edge };
+                        try { e.target.setPointerCapture(e.pointerId); } catch (_) {}
+                    };
+                    h0.addEventListener('pointerdown', e => grab('s', e));
+                    h1.addEventListener('pointerdown', e => grab('e', e));
+                    h0.addEventListener('pointermove', dragMove);
+                    h1.addEventListener('pointermove', dragMove);
+                    h0.addEventListener('pointerup', dragEnd);
+                    h1.addEventListener('pointerup', dragEnd);
+                    h0.addEventListener('pointercancel', dragEnd);
+                    h1.addEventListener('pointercancel', dragEnd);
+                    track.addEventListener('pointerdown', e => {
+                        e.stopPropagation();
+                        if (e.target && e.target.closest('.sig-h')) return;
+                        const t = atFromEvent(e);
+                        // тап по треку — предпросмотр в этой точке (не меняем границы)
+                        scrubTo(marker, t);
+                        applyTimedTextsAt(marker, t);
+                    });
+                };
+
+                (marker._timedTexts || []).forEach(mkTTItem);
+            }
             attachSigTrack('left');
             attachSigTrack('right');
             row.appendChild(sigsec);
+            attachTimedTextSection(marker, dur, row);
             scrubBody.appendChild(row);
 
             const refresh = () => {
@@ -1128,7 +1495,6 @@
         scrubModal.classList.remove('visible');
         playables().forEach(m => applySignal(m, m._savedBlink));
     }
-
     scrubClose.addEventListener('click', closeScrubber);
     confirmYes.addEventListener('click', () => { const m = _confirmMarker; hideConfirm(); if (m) deleteRecording(m); });
     confirmNo.addEventListener('click', hideConfirm);
@@ -1174,6 +1540,7 @@
     // ---- Патч removeMarker: обновляем видимость кнопки PLAY ----
     const origRemove = window.removeMarker;
     window.removeMarker = function (marker) {
+        removeAllTimedTextDom(marker);
         origRemove(marker);
         hideAllRecBtns();
         updatePlayAllBtn();
