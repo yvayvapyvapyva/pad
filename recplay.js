@@ -38,7 +38,7 @@
         #recAllBtn:active, #playAllBtn:active { transform:scale(0.92); }
         @keyframes recPulse { 50% { opacity:0.5; } }
         #scrubModal {
-            position:fixed; left:0; right:0; bottom:0; max-height:85vh; z-index:9100;
+            position:fixed; left:0; right:0; bottom:0; max-height:50vh; z-index:9100;
             background:rgba(15,15,15,0.97); color:#fff;
             display:flex; flex-direction:column;
             border-radius:16px 16px 0 0; border-top:0.5px solid rgba(255,255,255,0.12);
@@ -172,9 +172,10 @@
         .scrub-tt-title { font-size:12px; font-weight:600; color:rgba(255,255,255,0.6); padding:0 2px 6px; }
         .scrub-tt-add { display:flex; align-items:center; gap:6px; padding:2px 0 8px; }
         .scrub-tt-input {
-            flex:1; min-width:0; height:36px; padding:0 12px; border-radius:9px;
+            flex:1; min-width:0; min-height:36px; padding:8px 12px; border-radius:9px;
             border:0.5px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.08);
             color:#fff; font-size:15px; outline:none; touch-action:manipulation; user-select:text; -webkit-user-select:text;
+            resize:none; overflow:hidden; line-height:1.35; box-sizing:border-box;
         }
         .scrub-tt-input:focus { border-color:#30D158; }
         .scrub-tt-addbtn {
@@ -1328,12 +1329,18 @@
                 title.textContent = 'Текст на карте (появляется на время)';
                 const addWrap = document.createElement('div');
                 addWrap.className = 'scrub-tt-add';
-                const inp = document.createElement('input');
+                const inp = document.createElement('textarea');
                 inp.className = 'scrub-tt-input';
-                inp.type = 'text';
+                inp.rows = 1;
                 inp.placeholder = 'Введите текст…';
                 inp.spellcheck = false;
                 inp.autocomplete = 'off';
+                const autoGrow = () => {
+                    inp.style.height = 'auto';
+                    inp.style.height = inp.scrollHeight + 'px';
+                };
+                inp.addEventListener('input', autoGrow);
+                autoGrow();
                 const addBtn = document.createElement('button');
                 addBtn.className = 'scrub-tt-addbtn';
                 addBtn.textContent = 'Добавить';
