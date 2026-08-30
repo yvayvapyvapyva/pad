@@ -2277,6 +2277,10 @@ function initCustomPinchRotate() {
                         if (Array.isArray(placedMarkers)) placedMarkers.forEach(m => m.update({ draggable: false }));
                         if (Array.isArray(textItems)) textItems.forEach(t => t.update({ draggable: false }));
                     }
+                    // Записи в сцене есть — включаем кнопку запуска воспроизведения
+                    // (имитация нажатия: тот же старт, что и по тапу пользователя).
+                    const pb = document.getElementById('playAllBtn');
+                    if (pb && !pb.classList.contains('active')) pb.click();
                 });
             };
             if (map) {
