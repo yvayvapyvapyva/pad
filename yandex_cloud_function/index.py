@@ -9,9 +9,8 @@
 #        YDB_ENDPOINT        — например grpcs://ydb.serverless.yandexcloud.net:2135
 #        YDB_DATABASE        — например /ru-central1/b1g.../etn...
 #        TELEGRAM_BOT_TOKEN  — (рекомендуется) токен бота для проверки init_data
-#                              и отправки отчётов о действиях.
-#        TELEGRAM_REPORT_CHAT_ID — chat_id, куда слать отчёты о действиях
-#                              (необязательно — без него отчёты не отправляются).
+#                              и для отправки отчётов (/report).
+#        REPORT_CHAT_ID      — chat_id, куда слать отчёты о запуске (endpoint /report).
 #
 # Безопасность: frontend шлёт user_id и init_data. Если задан TELEGRAM_BOT_TOKEN,
 # сервер проверяет подпись init_data и берёт user_id из неё (надёжно). Иначе
@@ -31,25 +30,36 @@ import hmac
 import json
 import os
 import urllib.parse
+import urllib.request
 
 import ydb
-import ydb.iam
-
-try:
-    from notifier import send_report
-except ImportError:
-    def send_report(*args, **kwargs):
-        return False
+import ydb.credentials
 
 
 def _scene_path() -> str:
     return os.environ["YDB_DATABASE"].rstrip("/") + "/scene"
 
 
+def _get_sa_token() -> dict:
+    """Получаем IAM-токен сервисного аккаунта функции из внутреннего сервиса метаданных."""
+    url = ("http://169.254.169.254/computeMetadata/v1/instance/"
+           "service-accounts/default/token")
+    req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+class _IAMCredentials(ydb.credentials.AbstractExpiringTokenCredentials):
+    """Динамические IAM-креды сервисного аккаунта (токен кэшируется и обновляется)."""
+
+    def _make_token_request(self):
+        return _get_sa_token()
+
+
 def _driver() -> ydb.DriverConfig:
     endpoint = os.environ["YDB_ENDPOINT"]
     database = os.environ["YDB_DATABASE"]
-    return ydb.DriverConfig(endpoint, database, credentials=ydb.iam.MetadataUrlCredentials())
+    return ydb.DriverConfig(endpoint, database, credentials=_IAMCredentials())
 
 
 def _ensure_table(session: ydb.Session) -> None:
@@ -180,6 +190,41 @@ def _rename_scene(session: ydb.Session, user_id: str, old_name: str, new_name: s
 
 # ---------- Проверка Telegram initData ----------
 
+def _request_path(event) -> str:
+    """Определяет путь HTTP-запроса из разных полей event Yandex Cloud функции."""
+    rc = event.get("requestContext") if isinstance(event, dict) else None
+    if isinstance(rc, dict) and rc.get("path"):
+        return rc["path"]
+    url = event.get("url") if isinstance(event, dict) else None
+    if url:
+        return urllib.parse.urlsplit(url).path
+    return "/"
+
+
+def _send_report(text: str) -> None:
+    """Отправляет готовый текст отчёта боту в Telegram (через env токен)."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("REPORT_CHAT_ID")
+    if not token or not chat_id:
+        raise ValueError("Не заданы TELEGRAM_BOT_TOKEN / REPORT_CHAT_ID")
+    url = ("https://api.telegram.org/bot{}/sendMessage"
+           .format(token))
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        resp.read()
+
+
 def _extract_user_id(body, required=True) -> str:
     """Возвращает валидированный user_id. Если required=False — допускает
     отсутствие user_id (для GET-запросов с owner_user_id)."""
@@ -260,6 +305,8 @@ def handler(event, context):
             "isBase64Encoded": False,
         }
 
+    path = _request_path(event)
+
     body = event.get("body") or ""
     if body and isinstance(body, dict):
         body = json.dumps(body)
@@ -270,6 +317,21 @@ def handler(event, context):
             body = {}
 
     query = event.get("queryStringParameters") or {}
+
+    # Отправка отчёта о запуске в Telegram.
+    # Роутимся по query-параметру action=report (надёжно для прямого вызова
+    # функции по https://functions.yandexcloud.net/<id>, где path пустой),
+    # а также поддерживаем путь /report.
+    if (query.get("action") == "report") or path.rstrip("/") == "/report":
+        try:
+            text = body.get("text") if isinstance(body, dict) else None
+            if not text:
+                raise ValueError("Поле 'text' обязательно")
+            _send_report(text)
+            return _ok({"ok": True})
+        except Exception as e:
+            return _error(str(e))
+
     name = body.get("name") if isinstance(body, dict) else None
     if not name:
         name = query.get("name")
@@ -312,7 +374,6 @@ def _dispatch(session, method, user_id, name, body, owner_user_id=None):
         if data is None:
             raise ValueError("Поле 'data' обязательно")
         saved = _upsert_scene(session, user_id, name, data)
-        send_report(user_id, "save", scene_name=name, status="ok")
         return {"ok": True, "name": saved}
 
     if method == "GET":
@@ -321,7 +382,6 @@ def _dispatch(session, method, user_id, name, body, owner_user_id=None):
             scene = _get_scene(session, target_user, name)
             if scene is None:
                 raise KeyError("Сцена не найдена")
-            send_report(user_id, "load", scene_name=name, status="ok")
             return {"ok": True, **scene}
         return {"ok": True, "scenes": _list_scenes(session, user_id)}
 
@@ -334,14 +394,12 @@ def _dispatch(session, method, user_id, name, body, owner_user_id=None):
         if not old_name:
             raise ValueError("Параметр 'from' обязателен")
         renamed = _rename_scene(session, user_id, old_name, name)
-        send_report(user_id, "rename", scene_name=name, status="ok", extra={"from": old_name})
         return {"ok": True, "name": renamed}
 
     if method == "DELETE":
         if not name:
             raise ValueError("Параметр 'name' обязателен")
         _delete_scene(session, user_id, name)
-        send_report(user_id, "delete", scene_name=name, status="ok")
         return {"ok": True, "name": name}
 
     raise ValueError("Метод не поддерживается: " + method)
