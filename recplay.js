@@ -212,6 +212,7 @@
         /* Маркер временной надписи на карте (не редактируется, не таскается) */
         .timed-text { opacity:0; pointer-events:none; }
         .timed-text.visible { opacity:1; }
+        .timed-text.visible.tt-draggable { pointer-events:auto; cursor:move; }
         .timed-text .text-input { background:rgba(30,30,30,0.15); color:#fff; border:1px solid rgba(255,255,255,0.9); text-shadow:0 1px 2px rgba(0,0,0,0.6); }
         /* Подсказка при выборе места на карте */
         #ttHint {
@@ -678,7 +679,17 @@
         const ta = document.createElement('div');
         ta.className = 'text-input timed-text-input';
         ta.textContent = tt.text || '';
-        const m = window.makeTextMarker(tt.lat, tt.lon, ta);
+        const m = window.makeTextMarker(tt.lat, tt.lon, ta, {
+            // Перетаскивание при открытой шторке: новая позиция пишется обратно в tt.
+            onDragEnd: () => {
+                if (!tt) return;
+                tt.lat = m._lat;
+                tt.lon = m._lon;
+                if (window.commit) window.commit();
+            }
+        });
+        m._timed = true;
+        m._tt = tt;
         m._fixed = true;
         m.update({ draggable: false });
         m._select.classList.add('fixed');
@@ -739,6 +750,24 @@
 
     function hideAllTimedTexts() {
         placedMarkers.forEach(m => applyTimedTexts(m, null));
+    }
+
+    // Включить/выключить перетаскивание временных надписей машинки.
+    // Pointer-events получают только видимые (visible) надписи — остальные
+    // не мешают карте даже при включённом draggable.
+    function setTimedTextsInteractive(marker, on) {
+        if (!marker || !marker._ttEls) return;
+        marker._ttEls.forEach(m => {
+            m.update({ draggable: on });
+            m._select.classList.toggle('tt-draggable', on);
+        });
+    }
+
+    // Общий стейт: перетаскивание доступно только для машинки открытой шторки,
+    // когда воспроизведение не идёт.
+    function updateTimedTextsInteractive() {
+        const on = _scrubOpen && !_playAll;
+        placedMarkers.forEach(m => setTimedTextsInteractive(m, on && m === _scrubMarker));
     }
 
     // Начать установку новой надписи тапом по карте.
@@ -874,6 +903,7 @@
         _masterStart = performance.now();
         _masterLast = 0;
         _masterRaf = requestAnimationFrame(masterFrame);
+        updateTimedTextsInteractive();
         updatePlayAllBtn();
     }
 
@@ -898,6 +928,7 @@
             m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
         });
         hideAllTimedTexts();
+        updateTimedTextsInteractive();
         updatePlayAllBtn();
     }
 
@@ -939,7 +970,15 @@
 
     function openScrubber(marker) {
         cancelPlaceText();
-        if (_scrubOpen) { if (marker && marker !== _scrubMarker) { buildScrubRows(marker); } return; }
+        if (_scrubOpen) {
+            if (marker && marker !== _scrubMarker) {
+                _scrubMarker = marker;
+                buildScrubRows(marker);
+                updateTimedTextsInteractive();
+                applyTimedTextsAt(marker, marker._scrubT);
+            }
+            return;
+        }
         if (_recOn) stopRec();
         if (_playAll) stopAll();
         _scrubOpen = true;
@@ -947,6 +986,8 @@
         playables().forEach(m => { m._savedBlink = m._blinkSide; });
         hideAllRecBtns();
         buildScrubRows(marker);
+        updateTimedTextsInteractive();
+        if (marker) applyTimedTextsAt(marker, marker._scrubT);
         scrubModal.classList.add('visible');
     }
 
@@ -1500,6 +1541,8 @@
         _scrubMarker = null;
         hideAllRecBtns();
         scrubModal.classList.remove('visible');
+        updateTimedTextsInteractive();
+        hideAllTimedTexts();
         playables().forEach(m => applySignal(m, m._savedBlink));
     }
     scrubClose.addEventListener('click', closeScrubber);

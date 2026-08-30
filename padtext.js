@@ -41,7 +41,8 @@ function stopTextMode() {
 }
 
 // Создание YMapMarker-маркера с полем ввода внутри
-function makeTextMarker(lat, lon, ta) {
+function makeTextMarker(lat, lon, ta, opts) {
+    opts = opts || {};
     const el = document.createElement('div');
     el.className = 'text-item';
     const badge = document.createElement('span');
@@ -54,7 +55,8 @@ function makeTextMarker(lat, lon, ta) {
         onDragMove: (coords) => {
             marker._lat = coords[1];
             marker._lon = coords[0];
-        }
+        },
+        onDragEnd: opts.onDragEnd
     }, el);
     marker._lat = lat;
     marker._lon = lon;
@@ -68,6 +70,7 @@ function makeTextMarker(lat, lon, ta) {
 // короткое нажатие — сворачивание/разворачивание в иконку «T»
 function setupTextLongPress(marker) {
     const el = marker._select;
+    if (marker._timed) return; // временные надписи редактируются перетаскиванием, не длинным нажатием
     let timer = null, longFired = false, moved = false, sx = 0, sy = 0;
     el.addEventListener('pointerdown', (e) => {
         if (marker._fixed && !textEditing) {
