@@ -925,7 +925,7 @@
                 applySignal(m, m._savedBlink);    // вернуть ручной сигнал
             }
             m._select.style.pointerEvents = '';
-            m.update({ draggable: !(m._panelOpen || drawMode || eraserMode) });
+            m.update({ draggable: window.markerDraggable ? window.markerDraggable(m) : !(m._panelOpen || drawMode || eraserMode) });
         });
         hideAllTimedTexts();
         updateTimedTextsInteractive();

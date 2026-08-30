@@ -713,7 +713,11 @@ let lastDrawScreen = null;
 let lineCoords = [];
 
 function setMarkersDraggable(v) {
-    placedMarkers.forEach(m => { if (placedMarkers.indexOf(m) !== -1) m.update({ draggable: v }); });
+    placedMarkers.forEach(m => {
+        if (placedMarkers.indexOf(m) !== -1) {
+            m.update({ draggable: v ? markerDraggable(m) : false });
+        }
+    });
 }
 
 function setHandlesVisible(v) {
@@ -950,6 +954,8 @@ function restoreScene(snap) {
     });
     // Если режим скрытия элементов управления активен на момент загрузки сцены,
     // новые маркеры/текст ещё раз делаем неперетаскиваемыми.
+    placedMarkers.forEach(m => m.update({ draggable: markerDraggable(m) }));
+    textItems.forEach(t => t.update({ draggable: true }));
     if (document.body.classList.contains('controls-hidden')) {
         placedMarkers.forEach(m => m.update({ draggable: false }));
         textItems.forEach(t => t.update({ draggable: false }));
@@ -1001,9 +1007,20 @@ let activeCar = null;
 
 function setActiveCar(m) {
     if (activeCar !== m) {
-        if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.remove('car-active');
+        if (activeCar && activeCar._rotWrap) {
+            activeCar._rotWrap.classList.remove('car-active');
+            if (activeCar._isZnak || activeCar._isTl) {
+                // Панель знака/светофора пропала — снимаем флаг активности: следующее
+                // касание снова будет только выделять, перетаскивание — со второго.
+                activeCar._everSelected = false;
+                activeCar.update({ draggable: markerDraggable(activeCar) });
+            }
+        }
         activeCar = m || null;
-        if (activeCar && activeCar._rotWrap) activeCar._rotWrap.classList.add('car-active');
+        if (activeCar && activeCar._rotWrap) {
+            activeCar._rotWrap.classList.add('car-active');
+            if (activeCar._isZnak) activeCar.update({ draggable: markerDraggable(activeCar) });
+        }
     }
     updateSignalBtns();
 }
@@ -1114,7 +1131,11 @@ function placePic(lat, lon, moveAngle) {
         if (window.placeTlMarker) {
             window.placeTlMarker(lat, lon, moveAngle, file);
             const m = placedMarkers[placedMarkers.length - 1];
-            if (m && m._isTl) setActiveCar(m);
+            if (m && m._isTl) {
+                setActiveCar(m);
+                m._everSelected = true;
+                m.update({ draggable: markerDraggable(m) });
+            }
         }
         selectedPic = null;
         document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
@@ -1129,6 +1150,7 @@ function placePic(lat, lon, moveAngle) {
     map.addChild(marker);
     placedMarkers.push(marker);
     setActiveCar(marker);
+    if (isZnak) { marker._everSelected = true; marker.update({ draggable: markerDraggable(marker) }); }
     selectedPic = null;
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
     commit();
@@ -1209,6 +1231,14 @@ function setupTopDrag(marker) {
         if (drawMode || eraserMode || marker._panelOpen) return;
         if (document.body.classList.contains('controls-hidden')) return;
         if (skipped(e.target)) return;
+        // Знак/светофор: первое касание вообще не двигает — только выделяет (панель вверху слева).
+        // Со второго нажатия двигается кастомным драгом «тянуть-вращать» (как машинка).
+        if ((marker._isZnak || marker._isTl) && !marker._everSelected) {
+            setActiveCar(marker);
+            marker._everSelected = true;
+            marker.update({ draggable: false });
+            return;
+        }
         armed = true; active = false; pid = e.pointerId;
         lastX = e.clientX; lastY = e.clientY; hasPrev = false;
         setActiveCar(marker);
@@ -1266,13 +1296,13 @@ function setupTopDrag(marker) {
         if (e.pointerId !== pid) return;
         pid = -1;
         if (active) {
-            marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
+            marker.update({ draggable: markerDraggable(marker) });
             map.update({ behaviors: (marker._panelOpen || drawMode || eraserMode) ? [] : appBehaviors });
             const moved = Math.abs(marker._lat - downLat) > 1e-12 || Math.abs(marker._lon - downLon) > 1e-12 ||
                 Math.abs(((marker._heading - downHeading) % 360 + 540) % 360 - 180) > 1e-6;
             if (moved) commit();
         } else if (armed) {
-            marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
+            marker.update({ draggable: markerDraggable(marker) });
             if (!(marker._panelOpen || drawMode || eraserMode) && !anyPanelOpen()) map.update({ behaviors: appBehaviors });
         }
         armed = false; active = false;
@@ -1409,12 +1439,22 @@ function anyPanelOpen() {
     return placedMarkers.some(m => m._panelOpen);
 }
 
+// Перетаскиваемость маркера: машинки/светофоры — всегда вне модальных режимов,
+// знак — только после того как он был выбран тапом И сейчас активен (панель вверху
+// слева с ножкой и т.д.). Первое касание знак не двигает вообще — только выделяет.
+function markerDraggable(marker) {
+    if (marker._isZnak || marker._isTl) {
+        return !!(activeCar === marker && marker._everSelected && !drawMode && !eraserMode);
+    }
+    return !(marker._panelOpen || drawMode || eraserMode);
+}
+
 function setPanel(marker, open) {
     if (marker._isTl) { if (window.setTlPanel) window.setTlPanel(marker, open); return; }
     ensureControlButtons(marker);
     marker._panelOpen = open;
     marker._rotWrap.classList.toggle('panel-open', marker._panelOpen);
-    marker.update({ draggable: !(marker._panelOpen || drawMode || eraserMode) });
+    marker.update({ draggable: markerDraggable(marker) });
     map.update({ behaviors: anyPanelOpen() ? [] : appBehaviors });
 }
 
@@ -2047,7 +2087,7 @@ function initCustomPinchRotate() {
             const hidden = document.body.classList.contains('controls-hidden');
             // В режиме скрытия элементов управления отключаем перетаскивание
             // машинок, знаков, светофоров и текста; при выходе — возвращаем.
-            placedMarkers.forEach(m => m.update({ draggable: !hidden && !(m._panelOpen || drawMode || eraserMode) }));
+            placedMarkers.forEach(m => m.update({ draggable: !hidden && markerDraggable(m) }));
             textItems.forEach(t => t.update({ draggable: !hidden }));
             // при скрытии закрываем шторку и все панели
             if (hidden) {
