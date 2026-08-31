@@ -50,7 +50,6 @@
                 lines.push('Пользователь: данные недоступны');
             }
             if (wa.initDataUnsafe && wa.initDataUnsafe.start_param) {
-                lines.push('Ссылка перехода: https://t.me/E_ia_bot/pad?startapp=' + wa.initDataUnsafe.start_param);
                 const decoded = decodeStartParam(wa.initDataUnsafe.start_param);
                 if (decoded && decoded.sceneName) {
                     const link = 'https://t.me/E_ia_bot/pad?startapp=' + encodeURIComponent(wa.initDataUnsafe.start_param);
