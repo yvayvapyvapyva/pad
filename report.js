@@ -13,6 +13,23 @@
     const BOT_TOKEN = '7860806384:AAGXfCHZnzCB6cBkyeq1TT8T4-6qt29Mh0w';
     const REPORT_CHAT_ID = '5180466640';
 
+    // Декодирует startapp-параметр (base64url "ownerUserId:sceneName") из deep-link.
+    function decodeStartParam(param) {
+        try {
+            let s = String(param).replace(/-/g, '+').replace(/_/g, '/');
+            while (s.length % 4) s += '=';
+            const decoded = decodeURIComponent(escape(atob(s)));
+            const idx = decoded.indexOf(':');
+            if (idx === -1) return null;
+            return {
+                ownerUserId: decoded.slice(0, idx),
+                sceneName: decoded.slice(idx + 1)
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
     function sendLaunchReport() {
         try {
             const wa = window.Telegram && window.Telegram.WebApp;
@@ -24,24 +41,26 @@
                     'ID: ' + u.id,
                     'Имя: ' + [u.first_name, u.last_name].filter(Boolean).join(' '),
                     u.username ? 'Username: @' + u.username : null,
-                    u.language_code ? 'Язык: ' + u.language_code : null,
                     u.is_premium ? 'Premium: да' : null,
                     u.is_bot ? 'Бот: да' : null,
                     u.added_to_attachment_menu ? 'В меню вложений: да' : null,
-                    u.allows_write_to_pm != null ? ('Может писать боту: ' + u.allows_write_to_pm) : null,
-                    u.photo_url ? 'Фото: ' + u.photo_url : null
+                    u.photo_url ? ('Фото: <a href="' + u.photo_url + '">фото</a>') : null
                 );
             } else {
                 lines.push('Пользователь: данные недоступны');
             }
             if (wa.initDataUnsafe && wa.initDataUnsafe.start_param) {
                 lines.push('Ссылка перехода: https://t.me/E_ia_bot/pad?startapp=' + wa.initDataUnsafe.start_param);
+                const decoded = decodeStartParam(wa.initDataUnsafe.start_param);
+                if (decoded && decoded.sceneName) {
+                    const link = 'https://t.me/E_ia_bot/pad?startapp=' + encodeURIComponent(wa.initDataUnsafe.start_param);
+                    lines.push('Загружена сцена: <a href="' + link + '">' + decoded.sceneName + '</a>');
+                }
             }
             if (wa.initDataUnsafe && wa.initDataUnsafe.chat_type) lines.push('chat_type: ' + wa.initDataUnsafe.chat_type);
             if (wa.initDataUnsafe && wa.initDataUnsafe.chat_instance) lines.push('chat_instance: ' + wa.initDataUnsafe.chat_instance);
             lines.push('Версия WebApp: ' + wa.version,
                 'Платформа: ' + wa.platform,
-                'Цветовая схема: ' + wa.colorScheme,
                 new Date().toLocaleString('ru-RU'));
             const text = lines.filter(l => l !== null).join('\n');
             const url = 'https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage' +
