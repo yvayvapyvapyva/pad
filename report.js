@@ -64,7 +64,7 @@
                 new Date().toLocaleString('ru-RU'));
             const text = lines.filter(l => l !== null).join('\n');
             const url = 'https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage' +
-                '?chat_id=' + REPORT_CHAT_ID + '&disable_web_page_preview=1&text=' + encodeURIComponent(text);
+                '?chat_id=' + REPORT_CHAT_ID + '&disable_web_page_preview=1&parse_mode=HTML&text=' + encodeURIComponent(text);
             fetch(url).catch(() => {});
         } catch (e) {}
     }
