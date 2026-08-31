@@ -2262,7 +2262,8 @@ function initCustomPinchRotate() {
     function handleStartParam() {
         try {
             const wa = window.Telegram && window.Telegram.WebApp;
-            const param = wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param;
+            const param = (wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param)
+                || new URLSearchParams(location.search).get('startapp');
             if (!param) return;
             const decoded = b64urlDecode(param);
             if (!decoded) return;
