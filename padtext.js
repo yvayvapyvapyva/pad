@@ -79,35 +79,16 @@ function makeTextMarker(lat, lon, ta, opts) {
 function setupTextLongPress(marker) {
     const el = marker._select;
     if (marker._timed) return; // временные надписи редактируются перетаскиванием, не длинным нажатием
-    let timer = null, longFired = false, moved = false, sx = 0, sy = 0;
     el.addEventListener('pointerdown', (e) => {
         if (marker._fixed && !textEditing) {
             if (window.setActiveText) window.setActiveText(marker);
-            sx = e.clientX; sy = e.clientY;
-            moved = false; longFired = false;
-            timer = setTimeout(() => { longFired = true; clearTimeout(timer); timer = null; startEditingText(marker); }, 1000);
-        }
-    });
-    el.addEventListener('pointermove', (e) => {
-        if (!timer && !moved) return;
-        if (Math.hypot(e.clientX - sx, e.clientY - sy) > 8) {
-            moved = true; clearLongPress();
         }
     });
     el.addEventListener('pointerup', (e) => {
-        const wasTimer = timer !== null;
-        clearLongPress();
         // Перетаскивать можно только активный текст: включаем драг только после тапа-
         // активации (на следующем касании), а если активность ушла — остаётся false.
         if (marker._fixed && !textEditing) marker.update({ draggable: activeText === marker });
-        if (!moved && !longFired && wasTimer && marker._fixed && !textEditing) {
-            setActiveText(marker);
-        }
     });
-    el.addEventListener('pointercancel', clearLongPress);
-    function clearLongPress() {
-        if (timer) { clearTimeout(timer); timer = null; }
-    }
 }
 
 // Сворачивание/разворачивание установленного текста в квадратную иконку «T»
@@ -123,7 +104,6 @@ function toggleTextCollapse(marker) {
 // Вход в режим редактирования установленного текста
 function startEditingText(marker) {
     if (textEditing) commitTextEditing();
-    closeTextPanel();
     const ta = marker._ta;
     if (!ta) return;
     textMode = true;
@@ -336,11 +316,16 @@ function syncTextPanel() {
 
 (function initTextPanel() {
     const cb = document.getElementById('textCollapseBtn');
+    const eb = document.getElementById('textEditBtn');
     const db = document.getElementById('textDelBtn');
     if (cb) cb.addEventListener('click', () => {
         if (!activeText) return;
         toggleTextCollapse(activeText);
         syncTextPanel();
+    });
+    if (eb) eb.addEventListener('click', () => {
+        if (!activeText) return;
+        startEditingText(activeText);
     });
     if (db) db.addEventListener('click', () => {
         if (!activeText) return;
