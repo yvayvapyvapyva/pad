@@ -196,10 +196,15 @@ function placeTextField(lat, lon) {
     textItems.push(marker);
     textEditing = { marker, ta };
     positionTextMarker(marker);
-    // Фокус сразу в поле — чтобы можно было вводить текст без дополнительного касания
+    // Синхронный фокус — в этом же жесте pointerdown, чтобы мобильная клавиатура
+    // гарантированно открылась (программный focus в rAF/timer клавиатуру не поднимает).
+    try { ta.focus(); } catch (e) {}
+    const sr = window.getSelection();
+    if (sr) { sr.selectAllChildren(ta); sr.collapseToEnd(); }
+    // Коррекция каретки и скролл к полю после первой отрисовки
     requestAnimationFrame(() => {
         if (!textEditing || textEditing.marker !== marker) return;
-        ta.focus();
+        try { ta.focus(); } catch (e) {}
         const r = window.getSelection();
         if (r) {
             r.selectAllChildren(ta);
