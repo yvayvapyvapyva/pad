@@ -125,19 +125,6 @@
         }
         #scrubDeleteBtn:active { background:rgba(255,69,58,1); }
         #scrubDeleteBtn.hidden { display:none; }
-        /* Круглая REC-кнопка над машинкой (появляется по длительному нажатию, если есть запись) */
-        .rec-btn {
-            position:absolute; top:-26px; left:50%; transform:translate(-50%,-50%);
-            display:none; align-items:center; justify-content:center;
-            min-width:34px; height:34px; border-radius:50%; padding:0;
-            background:rgba(255,69,58,0.95); border:0.5px solid rgba(255,255,255,0.35);
-            color:#fff; font-size:11px; font-weight:700; line-height:1;
-            box-shadow:0 4px 14px rgba(0,0,0,0.5); cursor:pointer; pointer-events:auto; z-index:1000;
-            touch-action:manipulation; white-space:nowrap;
-        }
-        .rec-btn.visible { display:flex; }
-        .rec-btn:active { transform:translate(-50%,-50%) scale(0.9); }
-        .rec-btn .rec-dot { width:8px; height:8px; border-radius:50%; background:#fff; flex-shrink:0; }
         .scrub-row { flex-wrap:wrap; }
         /* Линии поворотников всегда раскрыты */
         .scrub-sigsec { flex:0 0 100%; display:block; padding-top:6px; }
@@ -642,7 +629,6 @@
         if (!t || !t.closest) return;
         const markerEl = t.closest('.pic-marker');
         if (!markerEl) return;
-        if (t.closest('.blink-btn') || t.closest('.delete-btn')) return;
         const marker = placedMarkers.find(m => m._select === markerEl);
         if (marker && !marker._recActive && !marker._isTl) {
             marker._recActive = true;
@@ -956,7 +942,6 @@
         // Если идёт одиночное воспроизведение — остановить его и начать общее.
         if (_playingSingle && _playAll) stopAll();
         if (_playAll) return;
-        hideAllRecBtns();
         const targets = playables().concat(tlRecMarkers());
         if (!targets.length) return;
         targets.forEach(markPlaying);
@@ -973,7 +958,6 @@
         if (_recOn) stopRec();
         if (_scrubOpen) closeScrubber();
         if (_playAll) stopAll(); // снимает _playing со всех машинок
-        hideAllRecBtns();
         markPlaying(marker);
         _maxDur = maxDurOf([marker]);
         _playingSingle = marker;
@@ -1037,7 +1021,6 @@
         _scrubOpen = true;
         _scrubMarker = marker || null;
         playables().forEach(m => { m._savedBlink = m._blinkSide; });
-        hideAllRecBtns();
         buildScrubRows(marker);
         updateTimedTextsInteractive();
         if (marker) applyTimedTextsAt(marker, marker._scrubT);
@@ -1058,45 +1041,10 @@
         }
     }
 
-    // ---- REC-кнопка над машинкой (по длительному нажатию) ----
+    // Есть ли у машинки запись движения.
     function hasRecording(m) {
         return !!(m._samples && m._samples.length >= 2 && hasMovement(m));
     }
-
-    function ensureRecBtn(marker) {
-        if (marker._recBtn) return marker._recBtn;
-        const b = document.createElement('div');
-        b.className = 'rec-btn';
-        b.innerHTML = '<span class="rec-dot"></span>';
-        b.title = 'Запись машинки';
-        b.setAttribute('aria-label', 'Запись машинки');
-        b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
-        b.addEventListener('click', e => {
-            e.stopPropagation();
-            hideAllRecBtns();
-            // Панель машинки (кнопки мигалок) при открытии записи скрываем
-            if (marker._panelOpen) setPanel(marker, false);
-            openScrubber(marker);
-        });
-        if (marker._rotWrap) marker._rotWrap.appendChild(b);
-        else if (marker._select) marker._select.appendChild(b);
-        marker._recBtn = b;
-        return b;
-    }
-
-    function hideAllRecBtns() {
-        placedMarkers.forEach(m => { if (m._recBtn) m._recBtn.classList.remove('visible'); });
-    }
-
-    // Хук из pad.html: длительное нажатие на машинку — показать/скрыть REC-кнопку
-    window.onMarkerLongPress = function (marker) {
-        if (!marker || marker._isTl || !marker._select) return;
-        if (!hasRecording(marker)) return;
-        const b = ensureRecBtn(marker);
-        const showing = b.classList.contains('visible');
-        hideAllRecBtns();
-        b.classList.toggle('visible', !showing);
-    };
 
     function showConfirm(marker) {
         _confirmMarker = marker;
@@ -1592,7 +1540,6 @@
         if (!_scrubOpen) return;
         _scrubOpen = false;
         _scrubMarker = null;
-        hideAllRecBtns();
         scrubModal.classList.remove('visible');
         updateTimedTextsInteractive();
         hideAllTimedTexts();
@@ -1645,6 +1592,7 @@
     });
 
     window.startSinglePlay = startSinglePlay;
+    window.openScrubber = openScrubber;
     window.isSinglePlaying = function (m) { return !!m && _playingSingle === m && _playAll; };
     window.stopAll = stopAll;
 
@@ -1653,7 +1601,6 @@
     window.removeMarker = function (marker) {
         removeAllTimedTextDom(marker);
         origRemove(marker);
-        hideAllRecBtns();
         updatePlayAllBtn();
     };
 

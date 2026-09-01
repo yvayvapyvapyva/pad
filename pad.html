@@ -348,26 +348,6 @@
         .signal-both.blink-on .turn-right-top, .signal-both.blink-on .turn-right-bottom {
             opacity:1;
         }
-        .blink-btn {
-            position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:8px;
-            background:rgba(15,15,15,0.85); border:0.5px solid rgba(255,255,255,0.2);
-            color:#fff; display:none; align-items:center; justify-content:center;
-            cursor:pointer; touch-action:none; pointer-events:auto; z-index:4;
-            box-shadow:0 4px 12px rgba(0,0,0,0.4); font-size:18px; line-height:1;
-        }
-        .blink-btn.active { background:rgba(48,209,88,0.5); border-color:#30D158; }
-        .blink-btn.blink-left { left:-52px; }
-        .blink-btn.blink-right { right:-52px; }
-        .panel-open .blink-btn { display:flex; }
-        .delete-btn {
-            position:absolute; top:calc(100% + 10px); left:50%; transform:translateX(-50%);
-            width:34px; height:34px; border-radius:50%;
-            background:rgba(255,69,58,0.9); border:1px solid rgba(255,255,255,0.35);
-            color:#fff; display:none; align-items:center; justify-content:center;
-            cursor:pointer; touch-action:none; pointer-events:auto; z-index:4;
-            box-shadow:0 4px 12px rgba(0,0,0,0.4); font-size:16px; line-height:1;
-        }
-        .panel-open .delete-btn { display:flex; }
         /* Запрет встроенного зума браузера на элементах управления */
         .fab, .sig-fab, #tlMini, .tlm-lamp, .tlm-side,
         #recAllBtn, #playAllBtn { touch-action:none !important; }
@@ -1106,7 +1086,6 @@ function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
     marker._lon = lon;
     marker._select = el;
     setupTopDrag(marker);
-    setupMarkerLongPress(marker);
     if (!isZnak) { ensureIndicators(marker); }
     updatePicMarker(marker);
     return marker;
@@ -1161,8 +1140,7 @@ function setupTopDrag(marker) {
 
     // Кнопки панелей исключаем; лампочки и боковые стрелки НЕ исключаем —
     // касание корпуса должно гасить нативный драг маркера и взводить механизм
-    const skipped = t => t.closest && (t.closest('.blink-btn') || t.closest('.delete-btn') ||
-        t.closest('.tl-ctrl') || t.closest('.rec-btn'));
+    const skipped = t => t.closest && t.closest('.tl-ctrl');
 
     // Видимые полуразмеры изображения (без учёта поворота)
     const halfExtents = () => {
@@ -1313,42 +1291,6 @@ function ensureIndicators(marker) {
     }
 }
 
-function ensureControlButtons(marker) {
-    if (marker._isTl) return;
-    const wrap = marker._rotWrap;
-    if (!marker._isZnak && !marker._leftBtn) {
-        const mkBtn = (cls, arrow, side) => {
-            const b = document.createElement('div');
-            b.className = 'blink-btn ' + cls;
-            b.innerHTML = arrow;
-            b.addEventListener('pointerdown', e => {
-                e.preventDefault();
-                e.stopPropagation();
-                setBlink(marker, side);
-                if (marker._panelOpen) togglePanel(marker);
-            });
-            wrap.appendChild(b);
-            return b;
-        };
-        marker._leftBtn = mkBtn('blink-left', '&#9664;', 'left');
-        marker._rightBtn = mkBtn('blink-right', '&#9654;', 'right');
-    }
-    if (!marker._deleteBtn) {
-        const del = document.createElement('div');
-        del.className = 'delete-btn';
-        del.innerHTML = '&#10005;';
-        del.addEventListener('pointerdown', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            removeMarker(marker);
-            commit();
-        });
-        wrap.appendChild(del);
-        marker._deleteBtn = del;
-    }
-    updatePicMarker(marker);
-}
-
 // Ножка знака: добавить/убрать. Высота ножки = высоте знака (задаётся в updatePicMarker)
 function toggleSignLeg(marker) {
     if (!marker || !marker._isZnak) return;
@@ -1439,47 +1381,7 @@ function markerDraggable(marker) {
 }
 
 function setPanel(marker, open) {
-    if (marker._isTl) { if (window.setTlPanel) window.setTlPanel(marker, open); return; }
-    ensureControlButtons(marker);
-    marker._panelOpen = open;
-    marker._rotWrap.classList.toggle('panel-open', marker._panelOpen);
-    marker.update({ draggable: markerDraggable(marker) });
-    map.update({ behaviors: anyPanelOpen() ? [] : appBehaviors });
-}
-
-function togglePanel(marker) {
-    setPanel(marker, !marker._panelOpen);
-}
-
-function setupMarkerLongPress(marker) {
-    const el = marker._select;
-    el.addEventListener('pointerdown', e => {
-        if (drawMode || eraserMode) return;
-        if (e.target.closest && (e.target.closest('.blink-btn') || e.target.closest('.delete-btn') || e.target.closest('.tl-ctrl'))) return;
-        const lpId = e.pointerId;
-        const sx = e.clientX, sy = e.clientY;
-        let timer = null;
-        const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
-        const onMove = ev => {
-            if (ev.pointerId !== lpId) return;
-            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > LP_MOVE_TOLERANCE_PX) clearTimer();
-        };
-        const end = ev => {
-            if (ev.pointerId !== lpId) return;
-            clearTimer();
-            window.removeEventListener('pointermove', onMove);
-            window.removeEventListener('pointerup', end);
-            window.removeEventListener('pointercancel', end);
-        };
-        timer = setTimeout(() => {
-            timer = null;
-            togglePanel(marker);
-            if (window.onMarkerLongPress) window.onMarkerLongPress(marker);
-        }, LP_DURATION_MS);
-        window.addEventListener('pointermove', onMove);
-        window.addEventListener('pointerup', end);
-        window.addEventListener('pointercancel', end);
-    });
+    if (marker._isTl && window.setTlPanel) window.setTlPanel(marker, open);
 }
 
 // Метры на пиксель (Web Mercator, тайлы 256px)
@@ -1830,17 +1732,47 @@ function initCustomPinchRotate() {
             commit();
         }
     });
-    document.getElementById('sigPlayBtn').addEventListener('pointerdown', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!activeCar) return;
-        if (window.isSinglePlaying && window.isSinglePlaying(activeCar)) {
-            if (window.stopAll) window.stopAll();
-            updateSignalBtns();
-        } else if (window.startSinglePlay) {
-            window.startSinglePlay(activeCar);
-        }
-    });
+    {
+        const pb = document.getElementById('sigPlayBtn');
+        let lpTimer = null, lpFired = false, lpId = null, lpX = 0, lpY = 0;
+        pb.addEventListener('pointerdown', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!activeCar) return;
+            lpFired = false;
+            lpId = e.pointerId;
+            lpX = e.clientX; lpY = e.clientY;
+            clearTimeout(lpTimer);
+            // Долгое нажатие — открыть шторку записи
+            lpTimer = setTimeout(() => {
+                lpTimer = null;
+                lpFired = true;
+                if (window.openScrubber && activeCar) window.openScrubber(activeCar);
+            }, LP_DURATION_MS);
+        });
+        pb.addEventListener('pointermove', e => {
+            if (e.pointerId !== lpId || lpFired) return;
+            if (Math.hypot(e.clientX - lpX, e.clientY - lpY) > LP_MOVE_TOLERANCE_PX) {
+                clearTimeout(lpTimer); lpTimer = null;
+            }
+        });
+        pb.addEventListener('pointerup', e => {
+            if (e.pointerId !== lpId) return;
+            clearTimeout(lpTimer); lpTimer = null;
+            if (lpFired || !activeCar) return;
+            // Короткое нажатие — запуск/остановка одиночного воспроизведения
+            if (window.isSinglePlaying && window.isSinglePlaying(activeCar)) {
+                if (window.stopAll) window.stopAll();
+                updateSignalBtns();
+            } else if (window.startSinglePlay) {
+                window.startSinglePlay(activeCar);
+            }
+        });
+        pb.addEventListener('pointercancel', e => {
+            if (e.pointerId !== lpId) return;
+            clearTimeout(lpTimer); lpTimer = null;
+        });
+    }
     document.getElementById('signLegBtn').addEventListener('pointerdown', e => {
         e.preventDefault();
         e.stopPropagation();
