@@ -13,6 +13,14 @@ let textMode = false;
 let textItems = [];
 let textEditing = null;
 
+// Флаг «тап по текстовой метке» — выставляется на фазе перехвата pointerdown,
+// чтобы глобальный слушатель карты не закрывал панель/активность текста
+// при тапе по самому тексту (иначе каждый тап деактивирует метку).
+window._textTapPointer = false;
+document.addEventListener('pointerdown', (e) => {
+    window._textTapPointer = !!(e.target && e.target.closest && e.target.closest('.text-item'));
+}, true);
+
 // Размер текста фиксирован в пикселях экрана — не зависит от масштаба карты.
 const TEXT_FONT_SIZE_PX = 16;
 // Ширина свёрнутой иконки «T» в метрах — одинакова на карте при любом масштабе.
@@ -56,7 +64,7 @@ function makeTextMarker(lat, lon, ta, opts) {
             marker._lat = coords[1];
             marker._lon = coords[0];
         },
-        onDragEnd: opts.onDragEnd
+        onDragEnd: () => { if (opts.onDragEnd) opts.onDragEnd(); else if (window.commit) window.commit(); }
     }, el);
     marker._lat = lat;
     marker._lon = lon;
@@ -74,6 +82,7 @@ function setupTextLongPress(marker) {
     let timer = null, longFired = false, moved = false, sx = 0, sy = 0;
     el.addEventListener('pointerdown', (e) => {
         if (marker._fixed && !textEditing) {
+            if (window.setActiveText) window.setActiveText(marker);
             sx = e.clientX; sy = e.clientY;
             moved = false; longFired = false;
             timer = setTimeout(() => { longFired = true; clearTimeout(timer); timer = null; startEditingText(marker); }, 1000);
@@ -88,8 +97,11 @@ function setupTextLongPress(marker) {
     el.addEventListener('pointerup', (e) => {
         const wasTimer = timer !== null;
         clearLongPress();
+        // Перетаскивать можно только активный текст: включаем драг только после тапа-
+        // активации (на следующем касании), а если активность ушла — остаётся false.
+        if (marker._fixed && !textEditing) marker.update({ draggable: activeText === marker });
         if (!moved && !longFired && wasTimer && marker._fixed && !textEditing) {
-            toggleTextCollapse(marker);
+            setActiveText(marker);
         }
     });
     el.addEventListener('pointercancel', clearLongPress);
@@ -111,6 +123,7 @@ function toggleTextCollapse(marker) {
 // Вход в режим редактирования установленного текста
 function startEditingText(marker) {
     if (textEditing) commitTextEditing();
+    closeTextPanel();
     const ta = marker._ta;
     if (!ta) return;
     textMode = true;
@@ -142,7 +155,7 @@ function buildTextItem(lat, lon, text, collapsed) {
     ta.textContent = text || '';
     const marker = makeTextMarker(lat, lon, ta);
     marker._fixed = true;
-    marker.update({ draggable: true });
+    marker.update({ draggable: false });
     marker._select.classList.add('fixed');
     positionTextMarker(marker);
     resizeTa(marker);
@@ -274,7 +287,7 @@ function commitTextEditing() {
         return;
     }
     marker._fixed = true;
-    marker.update({ draggable: true });
+    marker.update({ draggable: false });
     ta.setAttribute('contenteditable', 'false');
     ta.classList.remove('empty');
     marker._select.classList.add('fixed');
@@ -283,8 +296,60 @@ function commitTextEditing() {
 }
 
 function removeTextItem(marker) {
+    if (marker === activeText) closeTextPanel();
     map.removeChild(marker);
     const idx = textItems.indexOf(marker);
     if (idx !== -1) textItems.splice(idx, 1);
     if (textEditing && textEditing.marker === marker) textEditing = null;
 }
+
+// ---- Панель выбора текстовой метки (слева вверху, как у знаков/машинок/светофоров) ----
+let activeText = null;
+
+function setActiveText(marker) {
+    if (activeText && activeText !== marker) {
+        activeText.update({ draggable: false });
+    }
+    activeText = marker || null;
+    const panel = document.getElementById('textPanel');
+    if (!panel) return;
+    if (marker) {
+        panel.classList.add('visible');
+        syncTextPanel();
+    } else {
+        panel.classList.remove('visible');
+    }
+}
+
+function closeTextPanel() {
+    setActiveText(null);
+}
+
+function syncTextPanel() {
+    const panel = document.getElementById('textPanel');
+    if (!panel || !activeText) return;
+    const cpBtn = document.getElementById('textCollapseBtn');
+    if (!cpBtn) return;
+    const collapsed = !!(activeText._select && activeText._select.classList.contains('collapsed'));
+    cpBtn.classList.toggle('active', collapsed);
+}
+
+(function initTextPanel() {
+    const cb = document.getElementById('textCollapseBtn');
+    const db = document.getElementById('textDelBtn');
+    if (cb) cb.addEventListener('click', () => {
+        if (!activeText) return;
+        toggleTextCollapse(activeText);
+        syncTextPanel();
+    });
+    if (db) db.addEventListener('click', () => {
+        if (!activeText) return;
+        const m = activeText;
+        closeTextPanel();
+        removeTextItem(m);
+        commit();
+    });
+})();
+
+window.closeTextPanel = closeTextPanel;
+window.setActiveText = setActiveText;
