@@ -715,6 +715,9 @@
             });
             statusEl.classList.remove('busy');
             statusEl.textContent = 'Загружено: ' + scene.name;
+            if (typeof window.sendSceneReport === 'function') {
+                window.sendSceneReport(scene.name, tgCreds().user_id);
+            }
             closeManager();
         } catch (e) {
             rows.forEach(r => r.classList.remove('loading'));
