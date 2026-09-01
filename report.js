@@ -44,7 +44,7 @@
     function userSummary() {
         const wa = window.Telegram && window.Telegram.WebApp;
         const u = wa && wa.initDataUnsafe && wa.initDataUnsafe.user;
-        if (!u) return 'Пользователь: данные недоступны';
+        if (!u) return 'default';
         let name = [u.first_name, u.last_name].filter(Boolean).join(' ') || 'аноним';
         if (u.photo_url) name = '<a href="' + u.photo_url + '">' + name + '</a>';
         const idPart = 'ID ' + u.id;
@@ -67,21 +67,23 @@
     function sendLaunchReport() {
         try {
             const wa = window.Telegram && window.Telegram.WebApp;
-            if (!wa) return;
             const lines = ['🚀 PAD: ' + userSummary()];
-            if (wa.initDataUnsafe && wa.initDataUnsafe.start_param) {
-                const decoded = decodeStartParam(wa.initDataUnsafe.start_param);
+            const startParam = (wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param)
+                || new URLSearchParams(location.search).get('startapp');
+            if (startParam) {
+                const decoded = decodeStartParam(startParam);
                 if (decoded && decoded.sceneName) {
                     lines.push(sceneLinkLine(decoded.sceneName, decoded.ownerUserId, 'из ссылки'));
                 }
             }
             const chat = [];
-            if (wa.initDataUnsafe && wa.initDataUnsafe.chat_type) chat.push(wa.initDataUnsafe.chat_type);
-            if (wa.initDataUnsafe) {
+            if (wa && wa.initDataUnsafe && wa.initDataUnsafe.chat_type) chat.push(wa.initDataUnsafe.chat_type);
+            if (wa && wa.initDataUnsafe) {
                 const ci = wa.initDataUnsafe.chat_instance;
                 if (ci) chat.push(String(ci));
             }
-            chat.push(wa.platform, 'WebApp ' + wa.version);
+            if (wa) chat.push(wa.platform, 'WebApp ' + wa.version);
+            else chat.push('unknown', 'WebApp 6.0');
             lines.push('chat: ' + chat.join(' · '));
             lines.push(new Date().toLocaleString('ru-RU'));
             sendReportMessage(lines);
