@@ -31,6 +31,7 @@
             bottom:calc(12px + env(safe-area-inset-bottom)); left:140px;
             box-sizing:border-box; padding:0; margin:0; -webkit-appearance:none; appearance:none;
             border-radius:12px; overflow:hidden;
+            transition:bottom .25s ease;
         }
         #tlPanel {
             position:fixed; bottom:calc(76px + env(safe-area-inset-bottom)); left:12px;
