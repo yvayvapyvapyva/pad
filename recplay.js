@@ -613,6 +613,8 @@
         if (_playAll) joinRecordedToPlay();
         updateRecBtn();
         updatePlayAllBtn();
+        // После завершения записи обновляем панель машинки — там появится кнопка воспроизведения.
+        if (window.updateSignalBtns) window.updateSignalBtns();
     }
 
     function toggleRec() {
