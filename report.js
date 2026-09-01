@@ -39,59 +39,70 @@
         } catch (e) {}
     }
 
-    function userLines() {
+    // Компактная сводка о пользователе: ключевые данные + признаки в одну строку.
+    // Имя оборачивается в ссылку на фото (если есть) — клик по нему открывает фото.
+    function userSummary() {
         const wa = window.Telegram && window.Telegram.WebApp;
         const u = wa && wa.initDataUnsafe && wa.initDataUnsafe.user;
-        const lines = [];
-        if (u) {
-            lines.push(
-                'ID: ' + u.id,
-                'Имя: ' + [u.first_name, u.last_name].filter(Boolean).join(' '),
-                u.username ? 'Username: @' + u.username : null,
-                u.is_premium ? 'Premium: да' : null,
-                u.is_bot ? 'Бот: да' : null,
-                u.added_to_attachment_menu ? 'В меню вложений: да' : null,
-                u.photo_url ? ('Фото: <a href="' + u.photo_url + '">фото</a>') : null
-            );
-        } else {
-            lines.push('Пользователь: данные недоступны');
-        }
-        if (wa && wa.initDataUnsafe && wa.initDataUnsafe.chat_type) lines.push('chat_type: ' + wa.initDataUnsafe.chat_type);
-        if (wa && wa.initDataUnsafe && wa.initDataUnsafe.chat_instance) lines.push('chat_instance: ' + wa.initDataUnsafe.chat_instance);
-        return lines;
+        if (!u) return 'Пользователь: данные недоступны';
+        let name = [u.first_name, u.last_name].filter(Boolean).join(' ') || 'аноним';
+        if (u.photo_url) name = '<a href="' + u.photo_url + '">' + name + '</a>';
+        const idPart = 'ID ' + u.id;
+        const userPart = u.username ? (name + ', @' + u.username + ', ' + idPart) : (name + ', ' + idPart);
+        const tags = [];
+        if (u.is_premium) tags.push('Premium');
+        if (u.is_bot) tags.push('Бот');
+        if (u.added_to_attachment_menu) tags.push('Меню вложений');
+        return userPart + (tags.length ? ' | ' + tags.join(' · ') : '');
     }
 
-    function sceneLinkLine(sceneName, ownerUserId) {
+    function sceneLinkLine(sceneName, ownerUserId, source) {
         const payload = btoa(unescape(encodeURIComponent(ownerUserId + ':' + sceneName)))
             .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         const link = 'https://t.me/E_ia_bot/pad?startapp=' + encodeURIComponent(payload);
-        return 'Загружена сцена: <a href="' + link + '">' + sceneName + '</a>';
+        const label = source ? ('Загружена сцена ' + source + ': ') : 'Загружена сцена: ';
+        return label + '<a href="' + link + '">' + sceneName + '</a>';
     }
 
     function sendLaunchReport() {
         try {
             const wa = window.Telegram && window.Telegram.WebApp;
             if (!wa) return;
-            const lines = ['🚀 Запуск мини-аппа'].concat(userLines());
+            const lines = ['🚀 PAD: ' + userSummary()];
             if (wa.initDataUnsafe && wa.initDataUnsafe.start_param) {
                 const decoded = decodeStartParam(wa.initDataUnsafe.start_param);
                 if (decoded && decoded.sceneName) {
-                    lines.push(sceneLinkLine(decoded.sceneName, decoded.ownerUserId));
+                    lines.push(sceneLinkLine(decoded.sceneName, decoded.ownerUserId, 'из ссылки'));
                 }
             }
-            lines.push('Версия WebApp: ' + wa.version,
-                'Платформа: ' + wa.platform,
-                new Date().toLocaleString('ru-RU'));
+            const chat = [];
+            if (wa.initDataUnsafe && wa.initDataUnsafe.chat_type) chat.push(wa.initDataUnsafe.chat_type);
+            if (wa.initDataUnsafe) {
+                const ci = wa.initDataUnsafe.chat_instance;
+                if (ci) chat.push(String(ci));
+            }
+            chat.push(wa.platform, 'WebApp ' + wa.version);
+            lines.push('chat: ' + chat.join(' · '));
+            lines.push(new Date().toLocaleString('ru-RU'));
             sendReportMessage(lines);
         } catch (e) {}
     }
 
-    // Отправляет отчёт о загрузке сцены из менеджера сцен (кликабельная ссылка через Telegram).
+    // Отправляет отчёт о загрузке сцены из менеджера сцен (такой же формат, что и запуск).
     function sendSceneReport(sceneName, ownerUserId) {
         try {
-            const lines = ['📂 Загрузка сцены'].concat(userLines())
-                .concat([sceneLinkLine(sceneName, ownerUserId)])
-                .concat([new Date().toLocaleString('ru-RU')]);
+            const wa = window.Telegram && window.Telegram.WebApp;
+            const lines = ['🚀 PAD: ' + userSummary()];
+            lines.push(sceneLinkLine(sceneName, ownerUserId, 'из меню'));
+            const chat = [];
+            if (wa && wa.initDataUnsafe && wa.initDataUnsafe.chat_type) chat.push(wa.initDataUnsafe.chat_type);
+            if (wa && wa.initDataUnsafe) {
+                const ci = wa.initDataUnsafe.chat_instance;
+                if (ci) chat.push(String(ci));
+            }
+            if (wa) chat.push(wa.platform, 'WebApp ' + wa.version);
+            lines.push('chat: ' + chat.join(' · '));
+            lines.push(new Date().toLocaleString('ru-RU'));
             sendReportMessage(lines);
         } catch (e) {}
     }
