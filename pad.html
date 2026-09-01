@@ -66,7 +66,7 @@
         #rotateBtn .rot-btn:active { background:rgba(255,255,255,0.15); }
         #rotateBtn .rot-btn + .rot-btn { border-left:0.5px solid rgba(255,255,255,0.12); }
         #historyBtn {
-            position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); right:12px;
+            position:fixed; top:calc(12px + env(safe-area-inset-top) + var(--tg-top)); left:12px;
             z-index:9005; display:flex; flex-direction:row; overflow:hidden;
             background:rgba(15,15,15,0.75); border:0.5px solid rgba(255,255,255,0.12); border-radius:52px;
             box-shadow:0 8px 32px rgba(0,0,0,0.3); touch-action:manipulation;
@@ -411,10 +411,10 @@
 </div>
 <div id="historyBtn">
     <button class="rot-btn" id="undoBtn" title="Отменить">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>
     </button>
     <button class="rot-btn" id="redoBtn" title="Вернуть">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" style="transform:scaleX(-1)"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
     </button>
 </div>
 <div id="picPanel" class="visible">
