@@ -28,14 +28,13 @@
     const style = document.createElement('style');
     style.textContent = `
         #addTlBtn {
-            bottom:calc(140px + env(safe-area-inset-bottom)); left:12px;
+            bottom:calc(12px + env(safe-area-inset-bottom)); left:140px;
             box-sizing:border-box; padding:0; margin:0; -webkit-appearance:none; appearance:none;
             border-radius:12px; overflow:hidden;
-            transition:bottom .25s ease;
         }
         #tlPanel {
-            position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:76px;
-            z-index:9005; width:max-content; max-width:calc(100vw - 88px);
+            position:fixed; bottom:calc(76px + env(safe-area-inset-bottom)); left:12px;
+            z-index:9005; width:max-content; max-width:calc(100vw - 24px);
             background:rgba(15,15,15,0.82); border:0.5px solid rgba(255,255,255,0.12); border-radius:16px;
             padding:10px; height:auto; max-height:210px; overflow-y:auto; overflow-x:hidden; display:none;
             box-shadow:0 20px 60px rgba(0,0,0,0.4); transition:bottom .25s ease;
