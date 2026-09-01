@@ -254,6 +254,7 @@
     let _masterRaf = null;
     let _masterStart = 0;
     let _maxDur = 1;
+    let _playingSingle = null;   // машинка, проигрываемая одиночно с панели
     let _scrubOpen = false;
     let _confirmMarker = null;
     let _scrubMarker = null; // машинка, для которой открыта панель записи
@@ -826,28 +827,55 @@
     // ---- Воспроизведение всех записей ----
     const MASTER_FRAME_MS = 33; // ~30fps — данные записаны ~10fps, этого достаточно для плавности
 
+    // Применить состояние одной машинки на момент elapsed (мс). Возвращает true,
+    // если машинка что-то воспроизводила (тексты/лампы/движение).
+    function advanceMarker(m, elapsed, bounds) {
+        let any = false;
+        if (m._playing && m._timedTexts && m._timedTexts.length) { applyTimedTexts(m, elapsed); any = true; }
+        if (m._playing && m._isTl && m._tlRec && m._tlRec.length) { applyTlAt(m, elapsed); any = true; }
+        else if (m._playing && m._samples && m._samples.length >= 2) {
+            sampleAt(m, elapsed);
+            if (!bounds || inBounds(bounds, m._lon, m._lat)) applyPosition(m);
+            any = true;
+        }
+        return any;
+    }
+
+    // Завершить одиночное воспроизведение: поставить машинку в конец записи,
+    // вернуть её сигнал и снять блокировку перетаскивания.
+    function endSinglePlay(m) {
+        if (!m._playing) return;
+        markStopped(m, true);
+        _playingSingle = null;
+        _playAll = false;
+        if (_masterRaf) cancelAnimationFrame(_masterRaf);
+        _masterRaf = null;
+        hideAllTimedTexts();
+        updateTimedTextsInteractive();
+        updatePlayAllBtn();
+        if (window.updateSignalBtns) window.updateSignalBtns();
+    }
+
     function masterFrame() {
         if (!_playAll) { _masterRaf = null; return; }
         const now = performance.now();
         if (now - _masterLast >= MASTER_FRAME_MS) {
             _masterLast = now;
-            // У каждой машинки/светофора — свой цикл (loopDur), общие часы (_masterStart)
             const bounds = visibleBounds(); // [[lngMin,latMin],[lngMax,latMax]] или null
+            // Одиночное воспроизведение одной машинки — без цикла, один проход.
+            if (_playingSingle) {
+                const m = _playingSingle;
+                const elapsed = now - _masterStart;
+                if (!m || elapsed >= endPhase(m)) { if (m) endSinglePlay(m); else stopAll(); return; }
+                if (!advanceMarker(m, elapsed, bounds)) { stopAll(); return; }
+                _masterRaf = requestAnimationFrame(masterFrame);
+                return;
+            }
+            // У каждой машинки/светофора — свой цикл (loopDur), общие часы (_masterStart)
             let any = false;
             placedMarkers.forEach(m => {
                 const elapsed = (now - _masterStart) % loopDur(m);
-                if (m._playing && m._timedTexts && m._timedTexts.length) {
-                    applyTimedTexts(m, elapsed);
-                    any = true;
-                }
-                if (m._playing && m._isTl && m._tlRec && m._tlRec.length) {
-                    applyTlAt(m, elapsed);
-                    any = true;
-                } else if (m._playing && m._samples && m._samples.length >= 2) {
-                    sampleAt(m, elapsed);
-                    if (!bounds || inBounds(bounds, m._lon, m._lat)) applyPosition(m);
-                    any = true;
-                }
+                if (advanceMarker(m, elapsed, bounds)) any = true;
             });
             if (!any) { _playAll = false; _masterRaf = null; updatePlayAllBtn(); return; }
         }
@@ -884,22 +912,35 @@
     }
 
 
-    function startAll() {
-        if (_playAll) return;
-        cancelPlaceText();
-        if (_recOn) stopRec();
-        hideAllRecBtns();
-        const targets = playables().concat(tlRecMarkers());
-        if (!targets.length) return;
-        targets.forEach(m => {
-            m._playing = true;
-            m._savedBlink = m._blinkSide;
-            if (m._isTl && m._lampState) m._savedLamps = Object.assign({}, m._lampState);
-            m.update({ draggable: false });
-            m._select.style.pointerEvents = 'none';
-        });
-        _maxDur = maxDurOf(targets);
-        _playAll = true;
+    // Подготовить машинку к воспроизведению: пометить играющей, сохранить
+    // текущий сигнал/лампы и заблокировать перетаскивание.
+    function markPlaying(m) {
+        m._playing = true;
+        m._savedBlink = m._blinkSide;
+        if (m._isTl && m._lampState) m._savedLamps = Object.assign({}, m._lampState);
+        m.update({ draggable: false });
+        m._select.style.pointerEvents = 'none';
+    }
+
+    // После остановки вернуть машинке её состояние: восстановить сигнал/лампы
+    // и снять блокировку перетаскивания. final=true — оставить в конце записи.
+    function markStopped(m, final) {
+        m._playing = false;
+        if (m._isTl) {
+            const L = m._savedLamps;
+            if (L) for (const k in L) { if (window.tlSetLamp) window.tlSetLamp(m, k, L[k]); }
+            m._savedLamps = undefined;
+        } else {
+            if (final) { sampleAt(m, endPhase(m)); applyPosition(m); }
+            else { sampleAt(m, m._phaseOffset || 0); applyPosition(m); }
+            applySignal(m, m._savedBlink);
+        }
+        m._select.style.pointerEvents = '';
+        m.update({ draggable: window.markerDraggable ? window.markerDraggable(m) : !(m._panelOpen || drawMode || eraserMode) });
+    }
+
+    // Запустить общий rAF-цикл воспроизведения с нуля.
+    function beginMaster() {
         _masterStart = performance.now();
         _masterLast = 0;
         _masterRaf = requestAnimationFrame(masterFrame);
@@ -907,47 +948,57 @@
         updatePlayAllBtn();
     }
 
+    function startAll() {
+        cancelPlaceText();
+        if (_recOn) stopRec();
+        // Если идёт одиночное воспроизведение — остановить его и начать общее.
+        if (_playingSingle && _playAll) stopAll();
+        if (_playAll) return;
+        hideAllRecBtns();
+        const targets = playables().concat(tlRecMarkers());
+        if (!targets.length) return;
+        targets.forEach(markPlaying);
+        _maxDur = maxDurOf(targets);
+        _playAll = true;
+        beginMaster();
+    }
+
+    // Одиночное воспроизведение записи одной машинки (кнопка Плей на панели).
+    function startSinglePlay(marker) {
+        if (!marker) return;
+        if (!(marker._samples && marker._samples.length >= 2) && !(marker._isTl && marker._tlRec && marker._tlRec.length)) return;
+        cancelPlaceText();
+        if (_recOn) stopRec();
+        if (_scrubOpen) closeScrubber();
+        if (_playAll) stopAll(); // снимает _playing со всех машинок
+        hideAllRecBtns();
+        markPlaying(marker);
+        _maxDur = maxDurOf([marker]);
+        _playingSingle = marker;
+        _playAll = true;
+        beginMaster();
+        if (window.updateSignalBtns) window.updateSignalBtns();
+    }
+
     function stopAll() {
         if (!_playAll) return;
         _playAll = false;
         if (_masterRaf) cancelAnimationFrame(_masterRaf);
         _masterRaf = null;
-        placedMarkers.forEach(m => {
-            if (!m._playing) return;
-            m._playing = false;
-            if (m._isTl) {
-                const L = m._savedLamps;
-                if (L) for (const k in L) { if (window.tlSetLamp) window.tlSetLamp(m, k, L[k]); }
-                m._savedLamps = undefined;
-            } else {
-                sampleAt(m, m._phaseOffset || 0); // вернуть на отсечённое начало
-                applyPosition(m);
-                applySignal(m, m._savedBlink);    // вернуть ручной сигнал
-            }
-            m._select.style.pointerEvents = '';
-            m.update({ draggable: window.markerDraggable ? window.markerDraggable(m) : !(m._panelOpen || drawMode || eraserMode) });
-        });
+        _playingSingle = null;
+        placedMarkers.forEach(m => { if (m._playing) markStopped(m, false); });
         hideAllTimedTexts();
         updateTimedTextsInteractive();
         updatePlayAllBtn();
+        if (window.updateSignalBtns) window.updateSignalBtns();
     }
 
     // Включить только что записанные машинки в текущее воспроизведение
     function joinRecordedToPlay() {
         let changed = false;
         placedMarkers.forEach(m => {
-            if (m._recActive && hasMovement(m) && !m._playing) {
-                m._playing = true;
-                m._savedBlink = m._blinkSide;
-                m.update({ draggable: false });
-                m._select.style.pointerEvents = 'none';
-                changed = true;
-            } else if (m._isTl && !m._playing && hasTlRec(m)) {
-                m._playing = true;
-                m._savedBlink = m._blinkSide;
-                if (m._lampState) m._savedLamps = Object.assign({}, m._lampState);
-                m.update({ draggable: false });
-                m._select.style.pointerEvents = 'none';
+            if (!m._playing && ((m._recActive && hasMovement(m)) || (m._isTl && hasTlRec(m)))) {
+                markPlaying(m);
                 changed = true;
             }
         });
@@ -1560,8 +1611,10 @@
     function updatePlayAllBtn() {
         if (!playAllBtn) return;
         const any = playables().length > 0 || placedMarkers.some(hasTlRec);
+        // Глобальная кнопка отражает только общее воспроизведение (не одиночное).
+        const allPlaying = _playAll && !_playingSingle;
         const hidden = document.body.classList.contains('controls-hidden');
-        if (hidden && any && !_playAll) {
+        if (hidden && any && !allPlaying) {
             playAllBtn.style.display = 'flex';
             playAllBtn.style.background = 'rgba(15,15,15,0.3)';
             playAllBtn.style.boxShadow = 'none';
@@ -1571,8 +1624,8 @@
             playAllBtn.style.background = '';
             playAllBtn.style.boxShadow = '';
             playAllBtn.style.display = any ? 'flex' : 'none';
-            playAllBtn.classList.toggle('active', _playAll);
-            playAllBtn.innerHTML = _playAll ? ICON_STOP : ICON_PLAY;
+            playAllBtn.classList.toggle('active', allPlaying);
+            playAllBtn.innerHTML = allPlaying ? ICON_STOP : ICON_PLAY;
         }
     }
 
@@ -1584,8 +1637,14 @@
     recAllBtn.addEventListener('click', toggleRec);
     playAllBtn.addEventListener('click', () => {
         if (_scrubOpen) { closeScrubber(); return; }
-        if (_playAll) { if (_recOn) stopRec(); stopAll(); } else startAll();
+        // При активном общем воспроизведении — останавливаем; иначе запускаем общее
+        // (startAll сам остановит одиночное, если оно идёт).
+        if (_playAll && !_playingSingle) { if (_recOn) stopRec(); stopAll(); } else startAll();
     });
+
+    window.startSinglePlay = startSinglePlay;
+    window.isSinglePlaying = function (m) { return !!m && _playingSingle === m && _playAll; };
+    window.stopAll = stopAll;
 
     // ---- Патч removeMarker: обновляем видимость кнопки PLAY ----
     const origRemove = window.removeMarker;

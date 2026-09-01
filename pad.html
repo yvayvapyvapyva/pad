@@ -260,6 +260,12 @@
         }
         .sig-fab.danger { color:#FF453A; }
         .sig-fab.danger:active { background:rgba(255,69,58,0.35); border-color:#FF453A; }
+        .sig-fab.play { color:#30D158; }
+        .sig-fab.play:active { background:rgba(48,209,88,0.3); border-color:#30D158; }
+        .sig-fab.play.active {
+            background:rgba(48,209,88,0.45); border-color:#30D158; color:#fff;
+            box-shadow:0 0 16px 4px rgba(48,209,88,0.55);
+        }
         #picGrid, #znakGrid { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
         .pic-item {
             display:flex; align-items:center; justify-content:center; padding:6px; border-radius:10px;
@@ -454,6 +460,10 @@
     <div class="sig-fab" id="sigRightBtn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M9 4l10 8-10 8z"/></svg></div>
     <div class="sig-fab" id="signLegBtn" style="display:none"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="9" y="2" width="6" height="20" rx="3" fill="#8E8E93" stroke="#fff" stroke-width="1"/></svg></div>
     <div class="sig-fab danger" id="sigDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+    <div class="sig-fab play" id="sigPlayBtn" style="display:none">
+        <svg class="pb-ic-play" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
+        <svg class="pb-ic-stop" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+    </div>
 </div>
 <div id="tlMini">
     <div class="tlm-wrap">
@@ -1025,6 +1035,20 @@ function updateSignalBtns() {
     r.classList.toggle('active', !!activeCar && activeCar._blinkSide === 'right');
     const hz = document.getElementById('sigHazBtn');
     if (hz) hz.classList.toggle('active', !!activeCar && activeCar._blinkSide === 'both');
+    // Кнопка Плей на панели — видна, если у машинки есть запись.
+    // При одиночном воспроизведении текущей машинки превращается в кнопку Стоп.
+    const pb = document.getElementById('sigPlayBtn');
+    if (pb) {
+        const isCar = !!activeCar && !isTl && !isZnak;
+        const hasRec = isCar && !!(activeCar._samples && activeCar._samples.length >= 2);
+        const playing = isCar && window.isSinglePlaying ? window.isSinglePlaying(activeCar) : false;
+        pb.style.display = hasRec || playing ? '' : 'none';
+        pb.classList.toggle('active', playing);
+        const playIc = pb.querySelector('.pb-ic-play');
+        const stopIc = pb.querySelector('.pb-ic-stop');
+        if (playIc) playIc.style.display = playing ? 'none' : '';
+        if (stopIc) stopIc.style.display = playing ? '' : 'none';
+    }
 }
 
 function addDrawPoint(coords, screen) {
@@ -1804,6 +1828,17 @@ function initCustomPinchRotate() {
         if (activeCar) {
             removeMarker(activeCar);
             commit();
+        }
+    });
+    document.getElementById('sigPlayBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!activeCar) return;
+        if (window.isSinglePlaying && window.isSinglePlaying(activeCar)) {
+            if (window.stopAll) window.stopAll();
+            updateSignalBtns();
+        } else if (window.startSinglePlay) {
+            window.startSinglePlay(activeCar);
         }
     });
     document.getElementById('signLegBtn').addEventListener('pointerdown', e => {
