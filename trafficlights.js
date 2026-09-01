@@ -164,10 +164,6 @@
             cell.appendChild(createTlDom(file));
             // в галерее светофор показан с включённым зелёным
             cell.querySelector('.tl-lamp.tl-green').classList.add('on');
-            const cap = document.createElement('div');
-            cap.className = 'tl-caption';
-            cap.textContent = TL_LABELS[file] || file;
-            cell.appendChild(cap);
             cell.addEventListener('pointerdown', e => startPicDrag(cell, e));
             cell.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
             grid.appendChild(cell);
