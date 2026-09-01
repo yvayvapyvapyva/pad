@@ -289,8 +289,10 @@ let activeText = null;
 function setActiveText(marker) {
     if (activeText && activeText !== marker) {
         activeText.update({ draggable: false });
+        if (activeText._select) activeText._select.classList.remove('text-active');
     }
     activeText = marker || null;
+    if (marker && marker._select) marker._select.classList.add('text-active');
     const panel = document.getElementById('textPanel');
     if (!panel) return;
     if (marker) {
