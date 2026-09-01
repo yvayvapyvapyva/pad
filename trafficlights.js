@@ -255,33 +255,6 @@
         map.update({ behaviors: anyPanelOpen() ? [] : appBehaviors });
     };
 
-    function setupTlLongPress(marker) {
-        const el = marker._select;
-        el.addEventListener('pointerdown', e => {
-            if (drawMode || eraserMode) return;
-            if (e.target.closest && e.target.closest('.tl-ctrl')) return;
-            const lpId = e.pointerId;
-            const sx = e.clientX, sy = e.clientY;
-            let timer = null;
-            const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
-            const onMove = ev => {
-                if (ev.pointerId !== lpId) return;
-                if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10) clearTimer();
-            };
-            const end = ev => {
-                if (ev.pointerId !== lpId) return;
-                clearTimer();
-                window.removeEventListener('pointermove', onMove);
-                window.removeEventListener('pointerup', end);
-                window.removeEventListener('pointercancel', end);
-            };
-            timer = setTimeout(() => { timer = null; window.setTlPanel(marker, !marker._panelOpen); }, 500);
-            window.addEventListener('pointermove', onMove);
-            window.addEventListener('pointerup', end);
-            window.addEventListener('pointercancel', end);
-        });
-    }
-
     // Ножка светофора: добавить/убрать (как у знаков). Высота ножки задаётся
     // в updateTlMarker относительно видимого размера корпуса.
     window.toggleTlLeg = function (marker) {
@@ -352,7 +325,6 @@
         marker._lat = lat;
         marker._lon = lon;
         if (window.setupTopDrag) setupTopDrag(marker);
-        setupTlLongPress(marker);
         setupLampTaps(marker);
         updatePicMarker(marker);
         map.addChild(marker);
