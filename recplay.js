@@ -490,13 +490,22 @@
             marker._lastRel = t;
             return t;
         }
-        return performance.now() - _recStart;
+        // Паузы (стилус убран с машинки) вычитаются из общей шкалы, чтобы время записи
+        // машинки шло только пока её двигают/удерживают. Учитываются и завершённые
+        // паузы (_pauseAcc), и текущая открытая пауза (_pauseFrom), чтобы шкала
+        // замирала прямо во время паузы, а не только после её закрытия.
+        const open = (marker._pauseFrom != null && marker._stylusOn === false)
+            ? (performance.now() - marker._pauseFrom) : 0;
+        return performance.now() - _recStart - (marker._pauseAcc || 0) - open;
     }
 
     function recFrame() {
         if (!_recOn) { _recRaf = null; return; }
         placedMarkers.forEach(m => {
             if (!m._recActive || m._isTl) return; // светофоры не сэмплируются по движению
+            // Пока стилус убран с машинки (пауза) — сэмплы не пишем: время машинки
+            // заморожено (см. relTime), движение запишется только во время касания.
+            if (m._stylusOn === false) return;
             const t = relTime(m);
             if (m._lastSampleT == null || t - m._lastSampleT >= SAMPLE_INTERVAL_MS) {
                 m._samples.push({ t: Math.round(t), lat: m._lat, lon: m._lon, heading: m._heading });
@@ -582,6 +591,8 @@
         if (_recRaf) cancelAnimationFrame(_recRaf);
         _recRaf = null;
         placedMarkers.forEach(m => {
+            // Закрываем незавершённую паузу, чтобы она не росла после остановки записи.
+            if (m._pauseFrom != null) { m._pauseAcc = (m._pauseAcc || 0) + (performance.now() - m._pauseFrom); m._pauseFrom = null; }
             if (!m._recActive) { m._prevSamples = undefined; return; }
             // Конец на собственной шкале машинки (а не _maxDur/времени сессии):
             // при записи во время воспроизведения шкала сдвинута на _phaseOffset.
@@ -609,7 +620,7 @@
         if (_recOn) {
             stopRec();
         } else {
-            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; m._recSigOpen = undefined; });
+            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; m._recSigOpen = undefined; m._stylusOn = false; m._activePtr = null; m._pauseAcc = 0; m._pauseFrom = null; });
             // Новая сессия записи: у светофоров обнуляем запись ламп (движение не пишется)
             placedMarkers.forEach(m => {
                 if (m._isTl && !m._playing) { m._tlRec = []; m._tlInit = null; m._phaseOffset = 0; }
@@ -650,6 +661,46 @@
             recordSignalChange(marker);
         }
     }, true);
+
+    // ---- Паузы записи при убранном стилусе ----
+    // Пока стилус убран с машинки (или идёт перетаскивание карты без касания машинки),
+    // шкала времени этой машинки «замораживается»: время её записи идёт только пока
+    // машинка реально перетаскивается. Паузы накапливаются в marker._pauseAcc и
+    // вычитаются в relTime, поэтому при воспроизведении движение остаётся непрерывным,
+    // а паузы (когда не тянешь) выпадают.
+    //
+    // Начало записи привязано НЕ к касанию (pointerdown), а к моменту фиксации драга
+    // на границе изображения — об этом сообщает setupTopDrag через window.onCarDragStart.
+    // Отпускание (конец драга) ловится по pointerup/pointercancel по сохранённому
+    // pointerId, чтобы срабатывать даже когда кнопку мыши отпускают далеко от машинки.
+    window.onCarDragStart = function (marker, pid) {
+        if (!_recOn || !marker || marker._isTl) return;
+        if (marker._stylusOn && marker._activePtr === pid) return; // уже тянем эту машинку
+        marker._stylusOn = true;
+        marker._activePtr = pid;
+        // Начался реальный драг — завершаем открытую паузу.
+        if (marker._pauseFrom != null) {
+            marker._pauseAcc = (marker._pauseAcc || 0) + (performance.now() - marker._pauseFrom);
+            marker._pauseFrom = null;
+        }
+    };
+
+    function endStylusRec(e) {
+        if (!_recOn) return;
+        // Ищем машинку по сохранённому pointerId, а НЕ по e.target: на десктопе
+        // кнопку мыши могут отпустить далеко от машинки (курсор уведён на карту),
+        // и тогда e.target — карта, а не .pic-marker. По pointerId событие находится
+        // надёжно независимо от того, где именно произошло отпускание.
+        const marker = placedMarkers.find(m => !m._isTl && m._activePtr === e.pointerId);
+        if (!marker) return;
+        marker._stylusOn = false;
+        marker._activePtr = null;
+        // Стилус убран машинки — открываем паузу (завершится при следующем драге).
+        if (marker._pauseFrom == null) marker._pauseFrom = performance.now();
+    }
+    window.addEventListener('pointerup', endStylusRec, true);
+    window.addEventListener('pointercancel', endStylusRec, true);
+    window.addEventListener('pointerlostcapture', endStylusRec, true);
 
     // ---- Временные текстовые надписи ----
     // Каждая надпись хранится в marker._timedTexts: { id, lat, lon, text, t0, t1 }.

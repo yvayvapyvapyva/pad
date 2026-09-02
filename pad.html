@@ -1083,6 +1083,7 @@ function buildPicMarker(isZnak, file, lat, lon, headingDeg) {
     wrap.style.transform = 'translate(-50%,-50%)';
     const img = document.createElement('img');
     img.src = (isZnak ? 'znaki/' : 'pic/') + encodeURIComponent(file);
+    img.draggable = false; // десктоп: не даём нативному HTML5-drag изображения ломать pointer-драг
     img.style.cssText = 'height:auto;display:block;pointer-events:none;';
     img.onerror = () => el.remove();
     wrap.appendChild(img);
@@ -1245,7 +1246,11 @@ function setupTopDrag(marker) {
         hasPrev = true;
         // пока вектор движения слишком мал — ждём (шум касания)
         if (mvx * mvx + mvy * mvy < 1) return;
-        tryEngage(e, mvx, mvy);
+        // Фиксация драга на границе изображения. Только в этот момент (а не при самом
+        // касании) начинается реальное перетаскивание — сообщаем об этом модулю записи,
+        // чтобы пауза (время, когда машинку не тянут) завершилась и запись пошла.
+        const engaged = tryEngage(e, mvx, mvy);
+        if (engaged && window.onCarDragStart) window.onCarDragStart(marker, e.pointerId);
     });
 
     window.addEventListener('pointermove', e => {
