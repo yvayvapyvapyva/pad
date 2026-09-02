@@ -485,7 +485,10 @@
     function relTime(marker) {
         if (_playAll) {
             const phase = (performance.now() - _masterStart) % loopDur(marker);
-            let t = phase - (marker._phaseOffset || 0);
+            // Паузы (стилус убран) накапливаются в _pausePhase и вычитаются из фазовой
+            // шкалы цикла, чтобы продолжение записи во время воспроизведения не прыгало
+            // во времени и паузы выпадали, как при обычной записи.
+            let t = phase - (marker._phaseOffset || 0) - (marker._pausePhase || 0);
             if (marker._lastRel != null && t < marker._lastRel) t += loopDur(marker);
             marker._lastRel = t;
             return t;
@@ -592,7 +595,7 @@
         _recRaf = null;
         placedMarkers.forEach(m => {
             // Закрываем незавершённую паузу, чтобы она не росла после остановки записи.
-            if (m._pauseFrom != null) { m._pauseAcc = (m._pauseAcc || 0) + (performance.now() - m._pauseFrom); m._pauseFrom = null; }
+            closePause(m);
             if (!m._recActive) { m._prevSamples = undefined; return; }
             // Конец на собственной шкале машинки (а не _maxDur/времени сессии):
             // при записи во время воспроизведения шкала сдвинута на _phaseOffset.
@@ -620,7 +623,7 @@
         if (_recOn) {
             stopRec();
         } else {
-            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; m._recSigOpen = undefined; m._stylusOn = false; m._activePtr = null; m._pauseAcc = 0; m._pauseFrom = null; });
+            placedMarkers.forEach(m => { m._recActive = false; m._prevSamples = undefined; m._lastRel = 0; m._lastSampleT = undefined; m._recSigOpen = undefined; m._stylusOn = false; m._activePtr = null; m._pauseAcc = 0; m._pausePhase = 0; m._pauseFrom = null; });
             // Новая сессия записи: у светофоров обнуляем запись ламп (движение не пишется)
             placedMarkers.forEach(m => {
                 if (m._isTl && !m._playing) { m._tlRec = []; m._tlInit = null; m._phaseOffset = 0; }
@@ -673,16 +676,29 @@
     // на границе изображения — об этом сообщает setupTopDrag через window.onCarDragStart.
     // Отпускание (конец драга) ловится по pointerup/pointercancel по сохранённому
     // pointerId, чтобы срабатывать даже когда кнопку мыши отпускают далеко от машинки.
+    // Закрыть открытую паузу записи машинки: накопить её длительность в смещении шкалы.
+    // В обычной записи смещение копится в _pauseAcc (реальные миллисекунды), а при записи
+    // во время воспроизведения (_playAll) — в _pausePhase (та же величина, но в фазовой
+    // шкале цикла), чтобы продолжение записи не прыгало по времени.
+    function closePause(marker) {
+        if (marker._pauseFrom == null) return;
+        const dur = performance.now() - marker._pauseFrom;
+        marker._pauseFrom = null;
+        if (_playAll) {
+            const ld = loopDur(marker);
+            marker._pausePhase = ((marker._pausePhase || 0) + dur) % ld;
+        } else {
+            marker._pauseAcc = (marker._pauseAcc || 0) + dur;
+        }
+    }
+
     window.onCarDragStart = function (marker, pid) {
         if (!_recOn || !marker || marker._isTl) return;
         if (marker._stylusOn && marker._activePtr === pid) return; // уже тянем эту машинку
         marker._stylusOn = true;
         marker._activePtr = pid;
         // Начался реальный драг — завершаем открытую паузу.
-        if (marker._pauseFrom != null) {
-            marker._pauseAcc = (marker._pauseAcc || 0) + (performance.now() - marker._pauseFrom);
-            marker._pauseFrom = null;
-        }
+        closePause(marker);
     };
 
     function endStylusRec(e) {
