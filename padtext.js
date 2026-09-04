@@ -75,25 +75,23 @@ function makeTextMarker(lat, lon, ta, opts) {
     return marker;
 }
 
-// Долгое нажатие на уже установленный (fixed) текст — переход в режим редактирования;
-// короткое нажатие — сворачивание/разворачивание в иконку «T»
+// Тап по установленному (fixed) тексту: вне режима перетаскивания тап (драг < 10px)
+// сворачивает/разворачивает в иконку «T»; если палец двигался больше — просто
+// перетаскивается карта. В режиме перетаскивания (_dragEnabled) — только перемещение.
 function setupTextLongPress(marker) {
     const el = marker._select;
     if (marker._timed) return; // временные надписи редактируются перетаскиванием, не длинным нажатием
-    let startLat = 0, startLon = 0;
+    const MOVE_TOL = 10; // перемещение пальца (px), начиная с которого считаем тап драгом карты
+    let downX = 0, downY = 0;
     el.addEventListener('pointerdown', (e) => {
-        startLat = marker._lat;
-        startLon = marker._lon;
+        downX = e.clientX; downY = e.clientY;
         if (marker._fixed && !textEditing) {
             if (window.setActiveText) window.setActiveText(marker);
         }
     });
     el.addEventListener('pointerup', (e) => {
         if (marker._fixed && !textEditing) setTextDragEnabled(marker, marker._dragEnabled);
-        // Одинарный тап (метка не сдвинулась с места) по фиксированному тексту:
-        // если режим перетаскивания ВЫКЛЮЧЕН — сворачивание/разворачивание в иконку «T».
-        // При включённом перетаскивании тап не сворачивает, чтобы не мешать драгу.
-        const moved = marker._lat !== startLat || marker._lon !== startLon;
+        const moved = Math.hypot(e.clientX - downX, e.clientY - downY) > MOVE_TOL;
         if (marker._fixed && !textEditing && !marker._dragEnabled && !moved) {
             toggleTextCollapse(marker);
             syncTextPanel();
