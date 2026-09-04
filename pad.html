@@ -226,6 +226,11 @@
         #textCollapseBtn svg[data-icon="expand"] { display:none; }
         #textCollapseBtn.active svg[data-icon="collapse"] { display:none; }
         #textCollapseBtn.active svg[data-icon="expand"] { display:block; }
+        #textDragBtn.active { background:rgba(48,209,88,0.5); border-color:#30D158; box-shadow:none; }
+        #textDragBtn.active svg { fill:#fff; }
+        #textDragBtn svg[data-icon="drag-off"] { display:none; }
+        #textDragBtn.active svg[data-icon="drag"] { display:none; }
+        #textDragBtn.active svg[data-icon="drag-off"] { display:block; }
         .tlm-body {
             width:36px; padding:7px 0; background:#202020; border:1px solid #fff;
             border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:9px;
@@ -333,6 +338,10 @@
         .text-item.collapsed .text-badge { display:flex; }
         .text-item.text-active { background:rgba(90,90,90,0.4); border-radius:6px; }
         .text-item.text-active.fixed .text-input { background:rgba(90,90,90,0.8); }
+        /* Режим перетаскивания активен: метка выделяется тонкой зелёной рамкой */
+        .text-item.text-drag { outline:1px solid #30D158; outline-offset:2px; border-radius:2px; }
+        .text-item.text-drag.fixed .text-input { outline:1px solid #30D158; outline-offset:1px; }
+        .text-item.text-drag.collapsed .text-badge { outline:1px solid #30D158; outline-offset:2px; }
 
         .sign-leg {
             position:absolute; left:50%; transform:translateX(-50%);
@@ -478,6 +487,7 @@
 <div id="textPanel">
     <div class="sig-fab" id="textCollapseBtn"><svg data-icon="collapse" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 5-6 5M21 7l-6 5 6 5"/></svg><svg data-icon="expand" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 3 12l6 5M15 7l6 5-6 5"/></svg></div>
     <div class="sig-fab" id="textEditBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 20h16M5.5 17.5l.5-3L15.5 5a2.12 2.12 0 0 1 3 3L9 17.5l-3 .5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="sig-fab" id="textDragBtn"><svg data-icon="drag" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M13 24C9.74 24 6.81 22 5.6 19L2.57 11.37C2.26 10.58 3 9.79 3.81 10.05L4.6 10.31C5.16 10.5 5.62 10.92 5.84 11.47L7.25 15H8V3.25C8 2.56 8.56 2 9.25 2S10.5 2.56 10.5 3.25V12H11.5V1.25C11.5 .56 12.06 0 12.75 0S14 .56 14 1.25V12H15V2.75C15 2.06 15.56 1.5 16.25 1.5C16.94 1.5 17.5 2.06 17.5 2.75V12H18.5V5.75C18.5 5.06 19.06 4.5 19.75 4.5S21 5.06 21 5.75V16C21 20.42 17.42 24 13 24Z"/></svg><svg data-icon="drag-off" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M13 24C9.74 24 6.81 22 5.6 19L2.57 11.37C2.26 10.58 3 9.79 3.81 10.05L4.6 10.31C5.16 10.5 5.62 10.92 5.84 11.47L7.25 15H8V3.25C8 2.56 8.56 2 9.25 2S10.5 2.56 10.5 3.25V12H11.5V1.25C11.5 .56 12.06 0 12.75 0S14 .56 14 1.25V12H15V2.75C15 2.06 15.56 1.5 16.25 1.5C16.94 1.5 17.5 2.06 17.5 2.75V12H18.5V5.75C18.5 5.06 19.06 4.5 19.75 4.5S21 5.06 21 5.75V16C21 20.42 17.42 24 13 24Z"/></svg></div>
     <div class="sig-fab danger" id="textDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
 </div>
 

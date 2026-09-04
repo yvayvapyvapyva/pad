@@ -70,6 +70,7 @@ function makeTextMarker(lat, lon, ta, opts) {
     marker._lon = lon;
     marker._select = el;
     marker._ta = ta;
+    marker._dragEnabled = false; // режим перетаскивания выключен по умолчанию
     setupTextLongPress(marker);
     return marker;
 }
@@ -79,15 +80,24 @@ function makeTextMarker(lat, lon, ta, opts) {
 function setupTextLongPress(marker) {
     const el = marker._select;
     if (marker._timed) return; // временные надписи редактируются перетаскиванием, не длинным нажатием
+    let startLat = 0, startLon = 0;
     el.addEventListener('pointerdown', (e) => {
+        startLat = marker._lat;
+        startLon = marker._lon;
         if (marker._fixed && !textEditing) {
             if (window.setActiveText) window.setActiveText(marker);
         }
     });
     el.addEventListener('pointerup', (e) => {
-        // Перетаскивать можно только активный текст: включаем драг только после тапа-
-        // активации (на следующем касании), а если активность ушла — остаётся false.
-        if (marker._fixed && !textEditing) marker.update({ draggable: activeText === marker });
+        if (marker._fixed && !textEditing) setTextDragEnabled(marker, marker._dragEnabled);
+        // Одинарный тап (метка не сдвинулась с места) по фиксированному тексту:
+        // если режим перетаскивания ВЫКЛЮЧЕН — сворачивание/разворачивание в иконку «T».
+        // При включённом перетаскивании тап не сворачивает, чтобы не мешать драгу.
+        const moved = marker._lat !== startLat || marker._lon !== startLon;
+        if (marker._fixed && !textEditing && !marker._dragEnabled && !moved) {
+            toggleTextCollapse(marker);
+            syncTextPanel();
+        }
     });
 }
 
@@ -288,11 +298,17 @@ let activeText = null;
 
 function setActiveText(marker) {
     if (activeText && activeText !== marker) {
+        // Уходя с метки — выключаем режим перетаскивания (чтобы он не «залипал»).
+        activeText._dragEnabled = false;
         activeText.update({ draggable: false });
-        if (activeText._select) activeText._select.classList.remove('text-active');
+        if (activeText._select) {
+            activeText._select.classList.remove('text-active');
+            activeText._select.classList.remove('text-drag');
+        }
     }
     activeText = marker || null;
     if (marker && marker._select) marker._select.classList.add('text-active');
+    if (marker) setTextDragEnabled(marker, marker._dragEnabled);
     const panel = document.getElementById('textPanel');
     if (!panel) return;
     if (marker) {
@@ -303,6 +319,15 @@ function setActiveText(marker) {
     }
 }
 
+// Включение/выключение режима перетаскивания текстовой метки:
+// кроме draggable переключает визуальное выделение (.text-drag).
+function setTextDragEnabled(marker, enabled) {
+    if (!marker) return;
+    marker._dragEnabled = !!enabled;
+    marker.update({ draggable: marker._dragEnabled });
+    if (marker._select) marker._select.classList.toggle('text-drag', marker._dragEnabled);
+}
+
 function closeTextPanel() {
     setActiveText(null);
 }
@@ -311,18 +336,27 @@ function syncTextPanel() {
     const panel = document.getElementById('textPanel');
     if (!panel || !activeText) return;
     const cpBtn = document.getElementById('textCollapseBtn');
-    if (!cpBtn) return;
-    const collapsed = !!(activeText._select && activeText._select.classList.contains('collapsed'));
-    cpBtn.classList.toggle('active', collapsed);
+    if (cpBtn) {
+        const collapsed = !!(activeText._select && activeText._select.classList.contains('collapsed'));
+        cpBtn.classList.toggle('active', collapsed);
+    }
+    const dragBtn = document.getElementById('textDragBtn');
+    if (dragBtn) dragBtn.classList.toggle('active', !!activeText._dragEnabled);
 }
 
 (function initTextPanel() {
     const cb = document.getElementById('textCollapseBtn');
     const eb = document.getElementById('textEditBtn');
     const db = document.getElementById('textDelBtn');
+    const drb = document.getElementById('textDragBtn');
     if (cb) cb.addEventListener('click', () => {
         if (!activeText) return;
         toggleTextCollapse(activeText);
+        syncTextPanel();
+    });
+    if (drb) drb.addEventListener('click', () => {
+        if (!activeText) return;
+        setTextDragEnabled(activeText, !activeText._dragEnabled);
         syncTextPanel();
     });
     if (eb) eb.addEventListener('click', () => {
