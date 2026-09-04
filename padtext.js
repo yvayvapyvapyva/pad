@@ -280,6 +280,8 @@ function commitTextEditing() {
     ta.classList.remove('empty');
     marker._select.classList.add('fixed');
     positionTextMarker(marker);
+    // После фиксации текста включаем режим перетаскивания (как у знаков/светофоров).
+    setTextDragEnabled(marker, true);
     commit();
 }
 
