@@ -275,6 +275,12 @@
             background:rgba(255,255,255,0.3); border-color:#fff;
             box-shadow:0 0 8px 2px rgba(255,255,255,0.45);
         }
+        #signDragBtn.active,
+        #tlDragBtn.active {
+            background:rgba(48,209,88,0.5); border-color:#30D158; box-shadow:none;
+        }
+        #signDragBtn.active svg,
+        #tlDragBtn.active svg { fill:#fff; }
         .sig-fab.danger { color:#FF453A; }
         .sig-fab.danger:active { background:rgba(255,69,58,0.35); border-color:#FF453A; }
         .sig-fab.play { color:#30D158; }
@@ -340,8 +346,11 @@
         .text-item.text-active.fixed .text-input { background:rgba(90,90,90,0.8); }
         /* Режим перетаскивания активен: метка выделяется тонкой зелёной рамкой */
         .text-item.text-drag { outline:1px solid #30D158; outline-offset:2px; border-radius:2px; }
-        .text-item.text-drag.fixed .text-input { outline:1px solid #30D158; outline-offset:1px; }
-        .text-item.text-drag.collapsed .text-badge { outline:1px solid #30D158; outline-offset:2px; }
+        /* Режим перетаскивания активен у знака/светофора: зелёная рамка вокруг тела,
+           как у текстового поля. Класс висит на .rot-wrap; рамка — на самом корпусе
+           (img у знака, .tl у светофора), т.к. .rot-wrap имеет схлопнутый/немасштабный layout */
+        .pic-marker .rot-wrap.marker-drag img { outline:2px solid #30D158; outline-offset:2px; border-radius:4px; }
+        .pic-marker .rot-wrap.marker-drag .tl { outline:2px solid #30D158; outline-offset:2px; border-radius:6px; }
 
         .sign-leg {
             position:absolute; left:50%; transform:translateX(-50%);
@@ -464,6 +473,7 @@
     <div class="sig-fab" id="sigHazBtn"><svg viewBox="0 0 22 10" width="30" height="13.6" fill="currentColor"><g><polygon points="6,0.5 0,5 6,9.5"/><rect x="6" y="3" width="5" height="4" rx="1.2"/></g><g><polygon points="16,0.5 22,5 16,9.5"/><rect x="11" y="3" width="5" height="4" rx="1.2"/></g></svg></div>
     <div class="sig-fab" id="sigRightBtn"><svg viewBox="0 0 22 10" width="30" height="13.6" fill="currentColor"><rect x="3" y="2.5" width="8" height="5" rx="1.2"/><polygon points="11,0.5 19,5 11,9.5"/></svg></div>
     <div class="sig-fab" id="signLegBtn" style="display:none"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="9" y="2" width="6" height="20" rx="3" fill="#8E8E93" stroke="#fff" stroke-width="1"/></svg></div>
+    <div class="sig-fab" id="signDragBtn" style="display:none"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M13 24C9.74 24 6.81 22 5.6 19L2.57 11.37C2.26 10.58 3 9.79 3.81 10.05L4.6 10.31C5.16 10.5 5.62 10.92 5.84 11.47L7.25 15H8V3.25C8 2.56 8.56 2 9.25 2S10.5 2.56 10.5 3.25V12H11.5V1.25C11.5 .56 12.06 0 12.75 0S14 .56 14 1.25V12H15V2.75C15 2.06 15.56 1.5 16.25 1.5C16.94 1.5 17.5 2.06 17.5 2.75V12H18.5V5.75C18.5 5.06 19.06 4.5 19.75 4.5S21 5.06 21 5.75V16C21 20.42 17.42 24 13 24Z"/></svg></div>
     <div class="sig-fab danger" id="sigDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
     <div class="sig-fab play" id="sigPlayBtn" style="display:none">
         <svg class="pb-ic-play" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
@@ -481,6 +491,7 @@
         <div class="tlm-side" data-key="right"><svg viewBox="0 0 22 10" width="34" height="15.6"><rect x="4" y="3" width="7" height="4" fill="currentColor"/><polygon points="11,1 18,5 11,9" fill="currentColor"/></svg></div>
     </div>
     <div class="sig-fab" id="tlLegBtn"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="9" y="2" width="6" height="20" rx="3" fill="#8E8E93" stroke="#fff" stroke-width="1"/></svg></div>
+    <div class="sig-fab" id="tlDragBtn"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M13 24C9.74 24 6.81 22 5.6 19L2.57 11.37C2.26 10.58 3 9.79 3.81 10.05L4.6 10.31C5.16 10.5 5.62 10.92 5.84 11.47L7.25 15H8V3.25C8 2.56 8.56 2 9.25 2S10.5 2.56 10.5 3.25V12H11.5V1.25C11.5 .56 12.06 0 12.75 0S14 .56 14 1.25V12H15V2.75C15 2.06 15.56 1.5 16.25 1.5C16.94 1.5 17.5 2.06 17.5 2.75V12H18.5V5.75C18.5 5.06 19.06 4.5 19.75 4.5S21 5.06 21 5.75V16C21 20.42 17.42 24 13 24Z"/></svg></div>
     <div class="sig-fab danger" id="tlDelBtn"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
 </div>
 
@@ -997,20 +1008,29 @@ function setActiveCar(m) {
     if (activeCar !== m) {
         if (activeCar && activeCar._rotWrap) {
             activeCar._rotWrap.classList.remove('car-active');
-            if (activeCar._isZnak || activeCar._isTl) {
-                // Панель знака/светофора пропала — снимаем флаг активности: следующее
-                // касание снова будет только выделять, перетаскивание — со второго.
-                activeCar._everSelected = false;
+            activeCar._rotWrap.classList.remove('marker-drag');
+            // Уходим с машинки/знака/светофора — выключаем режим перетаскивания.
+            if (activeCar._dragEnabled) {
+                activeCar._dragEnabled = false;
                 activeCar.update({ draggable: markerDraggable(activeCar) });
             }
         }
         activeCar = m || null;
         if (activeCar && activeCar._rotWrap) {
             activeCar._rotWrap.classList.add('car-active');
-            if (activeCar._isZnak) activeCar.update({ draggable: markerDraggable(activeCar) });
+            if (activeCar._isZnak || activeCar._isTl) activeCar.update({ draggable: markerDraggable(activeCar) });
         }
     }
     updateSignalBtns();
+}
+
+// Включение/выключение режима перетаскивания знака/светофора:
+// кроме draggable переключает визуальное выделение (.marker-drag).
+function setMarkerDragEnabled(marker, enabled) {
+    if (!marker) return;
+    marker._dragEnabled = !!enabled;
+    marker.update({ draggable: markerDraggable(marker) });
+    if (marker._rotWrap) marker._rotWrap.classList.toggle('marker-drag', marker._dragEnabled);
 }
 
 function updateSignalBtns() {
@@ -1033,6 +1053,11 @@ function updateSignalBtns() {
         ml.classList.toggle('on', !!activeCar._lampState.left);
         mr.classList.toggle('on', !!activeCar._lampState.right);
         document.getElementById('tlLegBtn').classList.toggle('active', isTl && !!activeCar._leg);
+        const tlDrag = document.getElementById('tlDragBtn');
+        if (tlDrag) {
+            tlDrag.style.display = isTl ? '' : 'none';
+            tlDrag.classList.toggle('active', isTl && !!activeCar._dragEnabled);
+        }
     }
     box.classList.toggle('visible', !!activeCar && !isTl && !drawMode && !eraserMode);
     // У знака вместо поворотников — кнопка ножки
@@ -1042,6 +1067,11 @@ function updateSignalBtns() {
     const legBtn = document.getElementById('signLegBtn');
     legBtn.style.display = isZnak ? '' : 'none';
     legBtn.classList.toggle('active', isZnak && !!activeCar._leg);
+    const signDrag = document.getElementById('signDragBtn');
+    if (signDrag) {
+        signDrag.style.display = isZnak ? '' : 'none';
+        signDrag.classList.toggle('active', isZnak && !!activeCar._dragEnabled);
+    }
     const l = document.getElementById('sigLeftBtn');
     const r = document.getElementById('sigRightBtn');
     l.classList.toggle('active', !!activeCar && activeCar._blinkSide === 'left');
@@ -1135,8 +1165,8 @@ function placePic(lat, lon, moveAngle) {
             const m = placedMarkers[placedMarkers.length - 1];
             if (m && m._isTl) {
                 setActiveCar(m);
-                m._everSelected = true;
-                m.update({ draggable: markerDraggable(m) });
+                setMarkerDragEnabled(m, true);
+                updateSignalBtns();
             }
         }
         selectedPic = null;
@@ -1152,7 +1182,7 @@ function placePic(lat, lon, moveAngle) {
     map.addChild(marker);
     placedMarkers.push(marker);
     setActiveCar(marker);
-    if (isZnak) { marker._everSelected = true; marker.update({ draggable: markerDraggable(marker) }); }
+    if (isZnak) { setMarkerDragEnabled(marker, true); updateSignalBtns(); }
     selectedPic = null;
     document.querySelectorAll('.pic-item').forEach(c => c.classList.remove('active'));
     commit();
@@ -1232,13 +1262,11 @@ function setupTopDrag(marker) {
         if (drawMode || eraserMode || marker._panelOpen) return;
         if (document.body.classList.contains('controls-hidden')) return;
         if (skipped(e.target)) return;
-        // Знак/светофор: первое касание вообще не двигает — только выделяет (панель вверху слева).
-        // Со второго нажатия двигается кастомным драгом «тянуть-вращать» (как машинка).
-        if ((marker._isZnak || marker._isTl) && !marker._everSelected) {
+        // Знак/светофор двигаются ТОЛЬКО через кнопку режима перетаскивания в панели.
+        // Обычное касание их не двигает — только выделяет (панель вверху слева).
+        if (marker._isZnak || marker._isTl) {
             setActiveCar(marker);
-            marker._everSelected = true;
-            marker.update({ draggable: false });
-            return;
+            if (!marker._dragEnabled) return;
         }
         armed = true; active = false; pid = e.pointerId;
         lastX = e.clientX; lastY = e.clientY; hasPrev = false;
@@ -1408,12 +1436,11 @@ function anyPanelOpen() {
     return placedMarkers.some(m => m._panelOpen);
 }
 
-// Перетаскиваемость маркера: машинки/светофоры — всегда вне модальных режимов,
-// знак — только после того как он был выбран тапом И сейчас активен (панель вверху
-// слева с ножкой и т.д.). Первое касание знак не двигает вообще — только выделяет.
+// Перетаскиваемость маркера: машинки — всегда вне модальных режимов,
+// знак/светофор — только когда включён режим перетаскивания (кнопка в панели).
 function markerDraggable(marker) {
     if (marker._isZnak || marker._isTl) {
-        return !!(activeCar === marker && marker._everSelected && !drawMode && !eraserMode);
+        return !!(marker._dragEnabled && !drawMode && !eraserMode);
     }
     return !(marker._panelOpen || drawMode || eraserMode);
 }
@@ -1819,6 +1846,14 @@ function initCustomPinchRotate() {
         e.stopPropagation();
         if (activeCar && activeCar._isZnak) toggleSignLeg(activeCar);
     });
+    document.getElementById('signDragBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar && activeCar._isZnak) {
+            setMarkerDragEnabled(activeCar, !activeCar._dragEnabled);
+            updateSignalBtns();
+        }
+    });
     // Мини-светофор: нажатие лампочки/стрелки переключает сигнал активного светофора
     document.querySelectorAll('#tlMini .tlm-lamp, #tlMini .tlm-side').forEach(el => {
         el.addEventListener('pointerdown', e => {
@@ -1834,6 +1869,14 @@ function initCustomPinchRotate() {
         e.preventDefault();
         e.stopPropagation();
         if (activeCar && activeCar._isTl && window.toggleTlLeg) window.toggleTlLeg(activeCar);
+    });
+    document.getElementById('tlDragBtn').addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeCar && activeCar._isTl) {
+            setMarkerDragEnabled(activeCar, !activeCar._dragEnabled);
+            updateSignalBtns();
+        }
     });
     document.getElementById('tlDelBtn').addEventListener('pointerdown', e => {
         e.preventDefault();
