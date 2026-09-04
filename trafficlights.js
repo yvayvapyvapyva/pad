@@ -269,13 +269,16 @@
         if (window.commit) window.commit();
     };
 
-    // Включение сигналов нажатием на лампы (работает в режиме управления)
+    // Включение сигналов нажатием на лампы прямо на карте (и в панели управления)
     function setupLampTaps(marker) {
         marker._tlRoot.querySelectorAll('.tl-lamp, .tl-side').forEach(el => {
             el.addEventListener('pointerdown', e => {
-                if (!marker._panelOpen) return;
+                // В режиме перетаскивания лампу не перехватываем — тап/драг должен
+                // перемещать светофор, а не переключать свет.
+                if (marker._dragEnabled) return;
                 e.preventDefault();
                 e.stopPropagation();
+                if (window.setActiveCar) window.setActiveCar(marker);
                 let key;
                 if (el.classList.contains('tl-lamp')) {
                     key = el.classList.contains('tl-red') ? 'red'
@@ -284,6 +287,8 @@
                     key = el.classList.contains('tl-side-left') ? 'left' : 'right';
                 }
                 setLamp(marker, key, !marker._lampState[key]);
+                // Синхронизируем мини-панель #tlMini с обновлённым состоянием ламп.
+                if (window.updateSignalBtns) window.updateSignalBtns();
             });
         });
     }
