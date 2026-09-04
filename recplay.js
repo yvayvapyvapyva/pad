@@ -221,7 +221,7 @@
 
     // SVG-иконки кнопки PLAY/STOP
     const ICON_PLAY = '<svg viewBox="0 0 24 24" width="26" height="26" fill="#fff"><path d="M7.5 4.2v15.6L20.5 12z"/></svg>';
-    const ICON_STOP = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>';
+    const ICON_STOP = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><rect x="5.5" y="4.5" width="5.5" height="15" rx="1.5"/><rect x="13" y="4.5" width="5.5" height="15" rx="1.5"/></svg>';
 
     const recAllBtn = document.createElement('div');
     recAllBtn.id = 'recAllBtn';
@@ -240,6 +240,8 @@
     let _playAll = false;        // глобальное воспроизведение активно
     let _masterRaf = null;
     let _masterStart = 0;
+    let _paused = false;         // общее воспроизведение стоит на паузе (позиция сохранена)
+    let _pauseStart = 0;         // момент перехода в паузу (для сдвига часов при resume)
     let _maxDur = 1;
     let _playingSingle = null;   // машинка, проигрываемая одиночно с панели
     let _scrubOpen = false;
@@ -1014,6 +1016,7 @@
         targets.forEach(markPlaying);
         _maxDur = maxDurOf(targets);
         _playAll = true;
+        _paused = false;
         beginMaster();
     }
 
@@ -1036,6 +1039,7 @@
     function stopAll() {
         if (!_playAll) return;
         _playAll = false;
+        _paused = false;
         if (_masterRaf) cancelAnimationFrame(_masterRaf);
         _masterRaf = null;
         _playingSingle = null;
@@ -1044,6 +1048,28 @@
         updateTimedTextsInteractive();
         updatePlayAllBtn();
         if (window.updateSignalBtns) window.updateSignalBtns();
+    }
+
+    // Пауза общего воспроизведения: останавливаем rAF-цикл, но сохраняем позицию —
+    // _playAll и _playing у маркеров остаются, поэтому при resume продолжим с того же места.
+    function pauseAll() {
+        if (!_playAll || _playingSingle || _paused) return;
+        _paused = true;
+        _pauseStart = performance.now();
+        if (_masterRaf) cancelAnimationFrame(_masterRaf);
+        _masterRaf = null;
+        updatePlayAllBtn();
+    }
+
+    // Продолжить общее воспроизведение с места, где было остановлено на паузу.
+    function resumeAll() {
+        if (!_paused) return;
+        // Сдвигаем общие часы вперёд на длительность паузы, чтобы elapsed не «прыгнул».
+        _masterStart += performance.now() - _pauseStart;
+        _paused = false;
+        _masterLast = 0;
+        _masterRaf = requestAnimationFrame(masterFrame);
+        updatePlayAllBtn();
     }
 
     // Включить только что записанные машинки в текущее воспроизведение
@@ -1628,7 +1654,8 @@
         if (!playAllBtn) return;
         const any = playables().length > 0 || placedMarkers.some(hasTlRec);
         // Глобальная кнопка отражает только общее воспроизведение (не одиночное).
-        const allPlaying = _playAll && !_playingSingle;
+        // На паузе кнопка показывает PLAY — значит «продолжить».
+        const allPlaying = _playAll && !_playingSingle && !_paused;
         const hidden = document.body.classList.contains('controls-hidden');
         if (hidden && any && !allPlaying) {
             playAllBtn.style.display = 'flex';
@@ -1651,12 +1678,42 @@
         .observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
     recAllBtn.addEventListener('click', toggleRec);
-    playAllBtn.addEventListener('click', () => {
-        if (_scrubOpen) { closeScrubber(); return; }
-        // При активном общем воспроизведении — останавливаем; иначе запускаем общее
-        // (startAll сам остановит одиночное, если оно идёт).
-        if (_playAll && !_playingSingle) { if (_recOn) stopRec(); stopAll(); } else startAll();
-    });
+    // Кнопка PLAY: короткое нажатие — пуск/пауза/продолжение, длинное (1с) — полная остановка.
+    {
+        const LP_STOP_MS = 1000;   // длительность долгого нажатия для полной остановки
+        const LP_MOVE_PX = 12;     // допустимое движение пальца при нажатии
+        let lpTimer = null, lpFired = false, lpId = null, lpX = 0, lpY = 0;
+        const cancelLp = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+        playAllBtn.addEventListener('pointerdown', e => {
+            if (_scrubOpen) return;
+            cancelLp();
+            lpFired = false;
+            lpId = e.pointerId;
+            lpX = e.clientX; lpY = e.clientY;
+            lpTimer = setTimeout(() => {
+                lpTimer = null;
+                lpFired = true;
+                // Полная остановка воспроизведения (как было раньше).
+                if (_recOn) stopRec();
+                stopAll();
+            }, LP_STOP_MS);
+        });
+        playAllBtn.addEventListener('pointermove', e => {
+            if (e.pointerId !== lpId || lpFired) return;
+            if (Math.hypot(e.clientX - lpX, e.clientY - lpY) > LP_MOVE_PX) cancelLp();
+        });
+        playAllBtn.addEventListener('pointerup', () => { cancelLp(); lpId = null; });
+        playAllBtn.addEventListener('pointercancel', () => { cancelLp(); lpId = null; });
+        playAllBtn.addEventListener('click', () => {
+            if (lpFired) { lpFired = false; return; } // долгое нажатие уже обработано
+            if (_scrubOpen) { closeScrubber(); return; }
+            // Если стоит пауза — продолжаем с сохранённого места.
+            if (_paused) { resumeAll(); return; }
+            // При активном общем воспроизведении — пауза; иначе запускаем общее
+            // (startAll сам остановит одиночное, если оно идёт).
+            if (_playAll && !_playingSingle) { if (_recOn) stopRec(); pauseAll(); } else startAll();
+        });
+    }
 
     window.startSinglePlay = startSinglePlay;
     window.openScrubber = openScrubber;
