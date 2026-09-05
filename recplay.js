@@ -1678,8 +1678,18 @@
             playAllBtn.classList.toggle('active', allPlaying);
             playAllBtn.innerHTML = allPlaying ? ICON_STOP : ICON_PLAY;
         }
-        // Кнопка полной остановки видна, только пока идёт воспроизведение или пауза.
-        if (stopAllBtn) stopAllBtn.style.display = (_playAll && !hidden) ? 'flex' : 'none';
+        // Кнопка полной остановки видна, пока идёт воспроизведение или пауза
+        // (в том числе в режиме скрытия кнопок — показывается полупрозрачной).
+        if (stopAllBtn) {
+            stopAllBtn.style.display = _playAll ? 'flex' : 'none';
+            if (hidden) {
+                stopAllBtn.style.background = 'rgba(15,15,15,0.3)';
+                stopAllBtn.style.boxShadow = 'none';
+            } else {
+                stopAllBtn.style.background = '';
+                stopAllBtn.style.boxShadow = '';
+            }
+        }
     }
 
     // При переключении режима скрытия элементов управления (controls-hidden)
