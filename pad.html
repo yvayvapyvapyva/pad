@@ -1779,19 +1779,25 @@ function initCustomPinchRotate() {
 
     // Регулярное онлайн-обновление синего маркера (без перемещения камеры).
     let userWatchId = null;
+    let flyPending = false;
+    function flyToUser() {
+        if (!lastPos) return;
+        flyPending = false;
+        map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
+    }
     function startUserTracking() {
         if (userWatchId != null) return;
         userWatchId = navigator.geolocation.watchPosition(p => {
             lastPos = [p.coords.latitude, p.coords.longitude];
             updateMarker();
+            if (flyPending) flyToUser();
         }, () => { userWatchId = null; }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
     }
 
     document.getElementById('locateBtn').addEventListener('click', () => {
         startUserTracking();
-        if (lastPos) {
-            map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
-        }
+        if (lastPos) flyToUser();
+        else flyPending = true;
     });
 
     document.getElementById('undoBtn').addEventListener('click', undoAction);
