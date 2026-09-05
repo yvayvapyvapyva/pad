@@ -394,6 +394,19 @@
         #locateBtn, #signalBtns, #tlMini, #textPanel { top: calc(76px + env(safe-area-inset-top) + var(--tg-top)); }
         #colorPanel { bottom: calc(76px + env(safe-area-inset-bottom)); }
         #widthSlider { bottom: calc(140px + env(safe-area-inset-bottom)); }
+        /* Оверлей загрузки сцены по ссылке (spinner + Загрузка) */
+        #loadOverlay {
+            position:fixed; inset:0; z-index:9500;
+            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+            background:rgba(10,13,18,0.55); color:#fff;
+            font-size:16px; font-weight:600; letter-spacing:0.3px;
+        }
+        #loadOverlay .load-spinner {
+            width:38px; height:38px; border-radius:50%;
+            border:3px solid rgba(255,255,255,0.22); border-top-color:#FFD60A;
+            animation:loadSpin .7s linear infinite;
+        }
+        @keyframes loadSpin { to { transform:rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -2316,6 +2329,28 @@ function initCustomPinchRotate() {
         } catch (e) { return null; }
     }
 
+    let loadOverlay = null;
+    const FLY_PAUSE_MS = 900; // длительность полёта карты к сцене + запас на отработку
+
+    function showLoadOverlay() {
+        if (loadOverlay) return;
+        loadOverlay = document.createElement('div');
+        loadOverlay.id = 'loadOverlay';
+        const spin = document.createElement('div');
+        spin.className = 'load-spinner';
+        const label = document.createElement('div');
+        label.textContent = 'Загружаю сцену';
+        loadOverlay.appendChild(spin);
+        loadOverlay.appendChild(label);
+        document.body.appendChild(loadOverlay);
+    }
+
+    function hideLoadOverlay() {
+        if (!loadOverlay) return;
+        loadOverlay.remove();
+        loadOverlay = null;
+    }
+
     function handleStartParam() {
         try {
             const wa = window.Telegram && window.Telegram.WebApp;
@@ -2329,12 +2364,16 @@ function initCustomPinchRotate() {
             const ownerUserId = decoded.slice(0, idx);
             const sceneName = decoded.slice(idx + 1);
             if (!ownerUserId || !sceneName) return;
+            // Показываем спиннер «Загрузка», пока сцена грузится в карту.
+            showLoadOverlay();
             if (!window.loadSharedScene) { setTimeout(handleStartParam, 100); return; }
             // При запуске по ссылке с параметром сразу включаем режим прозрачности
             if (document.body) document.body.classList.add('controls-hidden');
             // Ждём готовности карты
             const doLoad = () => {
                 window.loadSharedScene(ownerUserId, sceneName).then(() => {
+                    // Сцена применена — ждём завершения полёта карты к сцене.
+                    setTimeout(() => hideLoadOverlay(), FLY_PAUSE_MS);
                     // Сцена применена — принудительно отключаем перетаскивание маркеров/текста
                     if (document.body && document.body.classList.contains('controls-hidden')) {
                         if (Array.isArray(placedMarkers)) placedMarkers.forEach(m => m.update({ draggable: false }));
