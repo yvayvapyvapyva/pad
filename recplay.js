@@ -25,7 +25,7 @@
     // ---- CSS ----
     const style = document.createElement('style');
     style.textContent = `
-        #recAllBtn, #playAllBtn {
+        #recAllBtn, #playAllBtn, #stopAllBtn {
             position:fixed; z-index:9005; width:52px; height:52px; border-radius:50%;
             border:0.5px solid rgba(255,255,255,0.12); color:#fff;
             display:flex; align-items:center; justify-content:center; cursor:pointer;
@@ -35,7 +35,8 @@
         #recAllBtn.active { animation:recPulse 1s ease-in-out infinite; }
         #playAllBtn { right:12px; top:calc(204px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(48,209,88,0.75); display:none; }
         #playAllBtn.active { background:rgba(255,69,58,0.75); animation:recPulse 1s ease-in-out infinite; }
-        #recAllBtn:active, #playAllBtn:active { transform:scale(0.92); }
+        #stopAllBtn { right:12px; top:calc(268px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(255,255,255,0.2); }
+        #recAllBtn:active, #playAllBtn:active, #stopAllBtn:active { transform:scale(0.92); }
         @keyframes recPulse { 50% { opacity:0.5; } }
         #scrubModal {
             position:fixed; left:0; right:0; bottom:0; max-height:50vh; z-index:9100;
@@ -222,6 +223,7 @@
     // SVG-иконки кнопки PLAY/STOP
     const ICON_PLAY = '<svg viewBox="0 0 24 24" width="26" height="26" fill="#fff"><path d="M7.5 4.2v15.6L20.5 12z"/></svg>';
     const ICON_STOP = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><rect x="5.5" y="4.5" width="5.5" height="15" rx="1.5"/><rect x="13" y="4.5" width="5.5" height="15" rx="1.5"/></svg>';
+    const ICON_STOP_SQUARE = '<svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>';
 
     const recAllBtn = document.createElement('div');
     recAllBtn.id = 'recAllBtn';
@@ -232,6 +234,12 @@
     playAllBtn.id = 'playAllBtn';
     playAllBtn.innerHTML = ICON_PLAY;
     document.body.appendChild(playAllBtn);
+
+    const stopAllBtn = document.createElement('div');
+    stopAllBtn.id = 'stopAllBtn';
+    stopAllBtn.innerHTML = ICON_STOP_SQUARE;
+    stopAllBtn.style.display = 'none';
+    document.body.appendChild(stopAllBtn);
 
     // ---- Состояние ----
     let _recOn = false;          // глобальная запись активна
@@ -1670,6 +1678,8 @@
             playAllBtn.classList.toggle('active', allPlaying);
             playAllBtn.innerHTML = allPlaying ? ICON_STOP : ICON_PLAY;
         }
+        // Кнопка полной остановки видна, только пока идёт воспроизведение или пауза.
+        if (stopAllBtn) stopAllBtn.style.display = (_playAll && !hidden) ? 'flex' : 'none';
     }
 
     // При переключении режима скрытия элементов управления (controls-hidden)
@@ -1678,42 +1688,19 @@
         .observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
     recAllBtn.addEventListener('click', toggleRec);
-    // Кнопка PLAY: короткое нажатие — пуск/пауза/продолжение, длинное (1с) — полная остановка.
-    {
-        const LP_STOP_MS = 1000;   // длительность долгого нажатия для полной остановки
-        const LP_MOVE_PX = 12;     // допустимое движение пальца при нажатии
-        let lpTimer = null, lpFired = false, lpId = null, lpX = 0, lpY = 0;
-        const cancelLp = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
-        playAllBtn.addEventListener('pointerdown', e => {
-            if (_scrubOpen) return;
-            cancelLp();
-            lpFired = false;
-            lpId = e.pointerId;
-            lpX = e.clientX; lpY = e.clientY;
-            lpTimer = setTimeout(() => {
-                lpTimer = null;
-                lpFired = true;
-                // Полная остановка воспроизведения (как было раньше).
-                if (_recOn) stopRec();
-                stopAll();
-            }, LP_STOP_MS);
-        });
-        playAllBtn.addEventListener('pointermove', e => {
-            if (e.pointerId !== lpId || lpFired) return;
-            if (Math.hypot(e.clientX - lpX, e.clientY - lpY) > LP_MOVE_PX) cancelLp();
-        });
-        playAllBtn.addEventListener('pointerup', () => { cancelLp(); lpId = null; });
-        playAllBtn.addEventListener('pointercancel', () => { cancelLp(); lpId = null; });
-        playAllBtn.addEventListener('click', () => {
-            if (lpFired) { lpFired = false; return; } // долгое нажатие уже обработано
-            if (_scrubOpen) { closeScrubber(); return; }
-            // Если стоит пауза — продолжаем с сохранённого места.
-            if (_paused) { resumeAll(); return; }
-            // При активном общем воспроизведении — пауза; иначе запускаем общее
-            // (startAll сам остановит одиночное, если оно идёт).
-            if (_playAll && !_playingSingle) { if (_recOn) stopRec(); pauseAll(); } else startAll();
-        });
-    }
+    playAllBtn.addEventListener('click', () => {
+        if (_scrubOpen) { closeScrubber(); return; }
+        // Если стоит пауза — продолжаем с сохранённого места.
+        if (_paused) { resumeAll(); return; }
+        // При активном общем воспроизведении — пауза; иначе запускаем общее
+        // (startAll сам остановит одиночное, если оно идёт).
+        if (_playAll && !_playingSingle) { if (_recOn) stopRec(); pauseAll(); } else startAll();
+    });
+    // Кнопка полной остановки: сбрасывает воспроизведение (и паузу) в начало.
+    stopAllBtn.addEventListener('click', () => {
+        if (_recOn) stopRec();
+        stopAll();
+    });
 
     window.startSinglePlay = startSinglePlay;
     window.openScrubber = openScrubber;
