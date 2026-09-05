@@ -536,12 +536,11 @@ const TURN_IND_SIZE_M = 1;
 
 const userLocSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#007AFF" opacity="0.2"/><circle cx="20" cy="20" r="9" fill="#007AFF" stroke="#fff" stroke-width="2.5"/></svg>`;
 
-function getPos() {
-    return new Promise(resolve => navigator.geolocation.getCurrentPosition(p => resolve([p.coords.longitude, p.coords.latitude]), () => resolve(null), { enableHighAccuracy: true, timeout: 15000 }));
-}
-
 function updateMarker() {
-    if (userMarker && lastPos) userMarker.update({ coordinates: [lastPos[1], lastPos[0]] });
+    if (userMarker && lastPos) {
+        userMarker.update({ coordinates: [lastPos[1], lastPos[0]] });
+        if (userMarker._el) userMarker._el.style.display = '';
+    }
 }
 
 function buildPicGrid() {
@@ -1586,7 +1585,7 @@ function initCustomPinchRotate() {
 (async () => {
     const { YMap, YMapDefaultSatelliteLayer, YMapDefaultFeaturesLayer, YMapMarker, YMapListener, YMapFeature } = await ymaps3.ready;
 
-    let center = await getPos();
+    let center = null;
     map = new YMap(document.getElementById('map'), {
         location: { center: center || [43.9968, 56.3269], zoom: 19 },
         zoomRounding: 'smooth',
@@ -1600,9 +1599,10 @@ function initCustomPinchRotate() {
     }));
 
     const el = document.createElement('div');
-    el.style.cssText = 'width:40px;height:40px;transform:translate(-50%,-50%);';
+    el.style.cssText = 'width:40px;height:40px;transform:translate(-50%,-50%);display:none;';
     el.innerHTML = userLocSvg;
     userMarker = new YMapMarker({ coordinates: [0, 0] }, el);
+    userMarker._el = el;
     map.addChild(userMarker);
 
     if (center) lastPos = [center[1], center[0]];
@@ -1764,14 +1764,21 @@ function initCustomPinchRotate() {
         drawWidth = parseInt(e.target.value, 10);
     });
 
-    navigator.geolocation.watchPosition(p => {
-        lastPos = [p.coords.latitude, p.coords.longitude];
-        updateMarker();
-    }, () => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+    // Регулярное онлайн-обновление синего маркера (без перемещения камеры).
+    let userWatchId = null;
+    function startUserTracking() {
+        if (userWatchId != null) return;
+        userWatchId = navigator.geolocation.watchPosition(p => {
+            lastPos = [p.coords.latitude, p.coords.longitude];
+            updateMarker();
+        }, () => { userWatchId = null; }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+    }
 
     document.getElementById('locateBtn').addEventListener('click', () => {
-        if (!lastPos) return;
-        map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
+        startUserTracking();
+        if (lastPos) {
+            map.update({ location: { center: [lastPos[1], lastPos[0]], duration: 400 } });
+        }
     });
 
     document.getElementById('undoBtn').addEventListener('click', undoAction);
