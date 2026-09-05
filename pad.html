@@ -549,6 +549,18 @@ const TURN_IND_SIZE_M = 1;
 
 const userLocSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#007AFF" opacity="0.2"/><circle cx="20" cy="20" r="9" fill="#007AFF" stroke="#fff" stroke-width="2.5"/></svg>`;
 
+// Запуск по ссылке на сцену (startapp) — тогда карту центрирует сама сцена.
+function hasStartParam() {
+    const wa = window.Telegram && window.Telegram.WebApp;
+    return !!((wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param)
+        || new URLSearchParams(location.search).get('startapp'));
+}
+
+// Разовое получение текущего местоположения.
+function getPos() {
+    return new Promise(resolve => navigator.geolocation.getCurrentPosition(p => resolve([p.coords.longitude, p.coords.latitude]), () => resolve(null), { enableHighAccuracy: true, timeout: 15000 }));
+}
+
 function updateMarker() {
     if (userMarker && lastPos) {
         userMarker.update({ coordinates: [lastPos[1], lastPos[0]] });
@@ -1598,7 +1610,9 @@ function initCustomPinchRotate() {
 (async () => {
     const { YMap, YMapDefaultSatelliteLayer, YMapDefaultFeaturesLayer, YMapMarker, YMapListener, YMapFeature } = await ymaps3.ready;
 
-    let center = null;
+    // При запуске без ссылки на сцену сразу центрируемся на текущем местоположении
+    // (при запуске по ссылке центр задаёт сама загружаемая сцена).
+    let center = hasStartParam() ? null : await getPos();
     map = new YMap(document.getElementById('map'), {
         location: { center: center || [43.9968, 56.3269], zoom: 19 },
         zoomRounding: 'smooth',
