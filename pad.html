@@ -362,7 +362,7 @@
         .turn-indicator {
             position:absolute; width:10px; height:10px;
             background:#FFCC00; border-radius:50%; opacity:0; pointer-events:none;
-            box-shadow:0 0 10px 3px rgba(255,204,0,0.85);
+            box-shadow:0 0 0 2px rgba(255,204,0,0.5), 0 0 0 4px rgba(255,204,0,0.22);
         }
         .turn-left-top { left:8%; top:8%; transform:translate(-50%,-50%); }
         .turn-left-bottom { left:8%; bottom:8%; transform:translate(-50%,50%); }
@@ -372,7 +372,7 @@
         .signal-right .turn-right-top, .signal-right .turn-right-bottom,
         .signal-both .turn-left-top, .signal-both .turn-left-bottom,
         .signal-both .turn-right-top, .signal-both .turn-right-bottom {
-            opacity:0.12;
+            opacity:0;
         }
         .signal-left.blink-on .turn-left-top, .signal-left.blink-on .turn-left-bottom,
         .signal-right.blink-on .turn-right-top, .signal-right.blink-on .turn-right-bottom,
