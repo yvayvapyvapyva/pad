@@ -31,11 +31,11 @@
             display:flex; align-items:center; justify-content:center; cursor:pointer;
             box-shadow:0 8px 32px rgba(0,0,0,0.3); font-size:13px; font-weight:700; letter-spacing:0.5px; line-height:1; touch-action:manipulation;
         }
-        #recAllBtn { right:12px; top:calc(140px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(255,69,58,0.75); }
+        #recAllBtn { right:12px; top:calc(204px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(255,69,58,0.75); }
         #recAllBtn.active { animation:recPulse 1s ease-in-out infinite; }
-        #playAllBtn { right:12px; top:calc(204px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(48,209,88,0.75); display:none; }
-        #playAllBtn.active { background:rgba(255,69,58,0.75); animation:recPulse 1s ease-in-out infinite; }
-        #stopAllBtn { right:12px; top:calc(268px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(255,255,255,0.2); }
+        #playAllBtn { right:12px; top:calc(268px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(15,15,15,0.75); display:none; }
+        #playAllBtn.active { animation:recPulse 1s ease-in-out infinite; }
+        #stopAllBtn { right:12px; top:calc(332px + env(safe-area-inset-top) + var(--tg-top, 0px)); background:rgba(15,15,15,0.75); }
         #recAllBtn:active, #playAllBtn:active, #stopAllBtn:active { transform:scale(0.92); }
         @keyframes recPulse { 50% { opacity:0.5; } }
         #scrubModal {
