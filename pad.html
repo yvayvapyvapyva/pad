@@ -981,14 +981,8 @@ function restoreScene(snap) {
         map.addChild(m);
         textItems.push(m);
     });
-    // Если режим скрытия элементов управления активен на момент загрузки сцены,
-    // новые маркеры/текст ещё раз делаем неперетаскиваемыми.
     placedMarkers.forEach(m => m.update({ draggable: markerDraggable(m) }));
     textItems.forEach(t => t.update({ draggable: false }));
-    if (document.body.classList.contains('controls-hidden')) {
-        placedMarkers.forEach(m => m.update({ draggable: false }));
-        textItems.forEach(t => t.update({ draggable: false }));
-    }
     updateSignalBtns();
 }
 
@@ -1291,7 +1285,6 @@ function setupTopDrag(marker) {
 
     el.addEventListener('pointerdown', e => {
         if (drawMode || eraserMode || marker._panelOpen) return;
-        if (document.body.classList.contains('controls-hidden')) return;
         if (skipped(e.target)) return;
         // Знак/светофор двигаются ТОЛЬКО через кнопку режима перетаскивания в панели.
         // Обычное касание их не двигает — только выделяет (панель вверху слева).
@@ -2144,10 +2137,11 @@ function initCustomPinchRotate() {
         document.body.classList.toggle('controls-hidden', hidden);
         const hideUiBtn = document.getElementById('hideUiBtn');
         if (hideUiBtn) hideUiBtn.classList.toggle('active', hidden);
-        // В режиме скрытия элементов управления отключаем перетаскивание
-        // машинок, знаков, светофоров и текста; при выходе — возвращаем.
-        placedMarkers.forEach(m => m.update({ draggable: !hidden && markerDraggable(m) }));
-        textItems.forEach(t => t.update({ draggable: !hidden }));
+        // Блокировать перетаскивание в режиме скрытия не нужно: знаки, светофоры
+        // и текст и так перемещаются только через включаемый в их панелях режим,
+        // а панели в этом режиме скрыты. Машинки можно двигать всегда, кроме
+        // момента воспроизведения записи (играющие маркеры блокирует recplay.js).
+        placedMarkers.forEach(m => m.update({ draggable: markerDraggable(m) && !m._playing }));
         // при скрытии закрываем шторку и все панели
         if (hidden) {
             if (pddModal.classList.contains('visible')) togglePdd();
@@ -2416,13 +2410,9 @@ function initCustomPinchRotate() {
                 window.loadSharedScene(ownerUserId, sceneName).then(() => {
                     // Сцена применена — ждём завершения полёта карты к сцене.
                     setTimeout(() => hideLoadOverlay(), FLY_PAUSE_MS);
-                    // Сцена применена — принудительно отключаем перетаскивание маркеров/текста
-                    if (document.body && document.body.classList.contains('controls-hidden')) {
-                        if (Array.isArray(placedMarkers)) placedMarkers.forEach(m => m.update({ draggable: false }));
-                        if (Array.isArray(textItems)) textItems.forEach(t => t.update({ draggable: false }));
-                    }
                     // Записи в сцене есть — включаем кнопку запуска воспроизведения
                     // (имитация нажатия: тот же старт, что и по тапу пользователя).
+                    // Играющие машинки блокирует markPlaying() в recplay.js.
                     const pb = document.getElementById('playAllBtn');
                     if (pb && !pb.classList.contains('active')) pb.click();
                 });
