@@ -1060,12 +1060,23 @@
 
     // Пауза общего воспроизведения: останавливаем rAF-цикл, но сохраняем позицию —
     // _playAll и _playing у маркеров остаются, поэтому при resume продолжим с того же места.
+    // Пока пауза активна, машинки можно двигать руками (см. setupTopDrag); при возобновлении
+    // воспроизведения они снова запираются и продолжают движение с фазы паузы.
+    function setPlayingCarsDraggable(on) {
+        placedMarkers.forEach(m => {
+            if (!m._playing || m._isZnak || m._isTl) return;
+            m.update({ draggable: on ? (window.markerDraggable ? window.markerDraggable(m) : true) : false });
+            if (m._select) m._select.style.pointerEvents = on ? '' : 'none';
+        });
+    }
+
     function pauseAll() {
         if (!_playAll || _playingSingle || _paused) return;
         _paused = true;
         _pauseStart = performance.now();
         if (_masterRaf) cancelAnimationFrame(_masterRaf);
         _masterRaf = null;
+        setPlayingCarsDraggable(true);
         updatePlayAllBtn();
     }
 
@@ -1076,6 +1087,8 @@
         _masterStart += performance.now() - _pauseStart;
         _paused = false;
         _masterLast = 0;
+        // Возвращаем блокировку: машинки продолжают движение с фазы, на которой стояли на паузе.
+        setPlayingCarsDraggable(false);
         _masterRaf = requestAnimationFrame(masterFrame);
         updatePlayAllBtn();
     }

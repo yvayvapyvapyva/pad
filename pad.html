@@ -1357,7 +1357,9 @@ function setupTopDrag(marker) {
             map.update({ behaviors: (marker._panelOpen || drawMode || eraserMode) ? [] : appBehaviors });
             const moved = Math.abs(marker._lat - downLat) > 1e-12 || Math.abs(marker._lon - downLon) > 1e-12 ||
                 Math.abs(((marker._heading - downHeading) % 360 + 540) % 360 - 180) > 1e-6;
-            if (moved) commit();
+            // Во время паузы воспроизведения машинку можно поставить руками — это
+            // временная правка, её не пишем в историю (marker._playing ещё активен).
+            if (moved && !marker._playing) commit();
         } else if (armed) {
             marker.update({ draggable: markerDraggable(marker) });
             if (!(marker._panelOpen || drawMode || eraserMode) && !anyPanelOpen()) map.update({ behaviors: appBehaviors });
