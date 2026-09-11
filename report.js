@@ -4,14 +4,15 @@
 // хранится здесь. Модуль самодостаточен и не зависит от DOM — работает,
 // даже если подключён до готовности документа.
 //
-// Отчёт уходит напрямую в Telegram Bot API (GET sendMessage).
-// Параметр отключения: window.disableLaunchReport === true.
+// Отчёт уходит на Cloudflare Worker (report_proxy), который пересылает
+// его в Telegram Bot API со своей стороны — клиент не ходит в telegram.org.
+// URL Worker'а задаётся в REPORT_URL. Параметр отключения: window.disableLaunchReport === true.
 
 (function () {
     if (window.sendLaunchReport) return;
 
-    const BOT_TOKEN = '7860806384:AAGXfCHZnzCB6cBkyeq1TT8T4-6qt29Mh0w';
-    const REPORT_CHAT_ID = '5180466640';
+    const REPORT_URL = 'https://pad-report.ivan43103.workers.dev/';
+    const REPORT_KEY = ''; // если задан — добавляется в заголовок X-Report-Key
 
     // Декодирует startapp-параметр (base64url "ownerUserId:sceneName") из deep-link.
     function decodeStartParam(param) {
@@ -32,10 +33,16 @@
 
     function sendReportMessage(lines) {
         try {
+            lines = lines.concat(['— via Cloudflare ☁️']);
             const text = lines.filter(l => l !== null).join('\n');
-            const url = 'https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage' +
-                '?chat_id=' + REPORT_CHAT_ID + '&disable_web_page_preview=1&parse_mode=HTML&text=' + encodeURIComponent(text);
-            fetch(url).catch(() => {});
+            if (!text) return;
+            const headers = { 'Content-Type': 'application/json' };
+            if (REPORT_KEY) headers['X-Report-Key'] = REPORT_KEY;
+            fetch(REPORT_URL, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ text: text })
+            }).catch(() => {});
         } catch (e) {}
     }
 
