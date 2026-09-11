@@ -3,30 +3,45 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
-        // В Telegram Mini App — раскрываем на весь экран
-        if (window.Telegram && window.Telegram.WebApp) {
-            const wa = window.Telegram.WebApp;
+        // Загружаем Telegram WebApp SDK асинхронно с таймаутом,
+        // чтобы при блокировке/недоступности telegram.org страница
+        // не зависала на десятки секунд (синхронный <script> блокирует рендер).
+        window._tgInitDone = false;
+        function _initTelegram() {
+            if (window._tgInitDone) return;
+            if (!(window.Telegram && window.Telegram.WebApp)) return;
+            window._tgInitDone = true;
+            var wa = window.Telegram.WebApp;
             wa.ready();
             wa.expand();
             if (typeof wa.disableVerticalSwipes === 'function') wa.disableVerticalSwipes();
             if (typeof wa.requestFullscreen === 'function') {
                 try { wa.requestFullscreen(); } catch (e) {}
             }
-            // Сдвиг верхних элементов управления ниже системных кнопок Telegram
-            const applyTgInsets = () => {
-                let top = 0;
-                const cs = wa.contentSafeAreaInset, sa = wa.safeAreaInset;
+            var applyTgInsets = function () {
+                var top = 0;
+                var cs = wa.contentSafeAreaInset, sa = wa.safeAreaInset;
                 if (cs && typeof cs.top === 'number') top = Math.max(top, cs.top);
                 if (sa && typeof sa.top === 'number') top = Math.max(top, sa.top);
                 document.documentElement.style.setProperty('--tg-top', Math.max(0, top) + 'px');
             };
             applyTgInsets();
-            ['viewportChanged', 'contentSafeAreaChanged', 'safeAreaChanged'].forEach(ev => {
+            ['viewportChanged', 'contentSafeAreaChanged', 'safeAreaChanged'].forEach(function (ev) {
                 if (typeof wa.onEvent === 'function') wa.onEvent(ev, applyTgInsets);
             });
         }
+        (function () {
+            var s = document.createElement('script');
+            s.src = 'https://telegram.org/js/telegram-web-app.js';
+            s.async = true;
+            s.onerror = function () { console.warn('Telegram WebApp SDK не загружен'); };
+            var timer = setTimeout(function () { s.src = ''; }, 5000);
+            s.onload = function () { clearTimeout(timer); _initTelegram(); };
+            document.head.appendChild(s);
+        })();
+        // Если SDK уже был в кэше браузера — инициализируем сразу
+        _initTelegram();
     </script>
     <script src="report.js"></script>
     <style>
