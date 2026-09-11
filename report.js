@@ -116,10 +116,29 @@
         } catch (e) {}
     }
 
+    var launchReportSent = false;
+    function sendLaunchReportOnce() {
+        if (launchReportSent) return;
+        launchReportSent = true;
+        sendLaunchReport();
+    }
+
     window.sendLaunchReport = sendLaunchReport;
     window.sendSceneReport = sendSceneReport;
 
     if (window.disableLaunchReport !== true) {
-        sendLaunchReport();
+        // Отчёт о запуске отправляем только после того, как Telegram
+        // проинициализирован — иначе userSummary() вернёт 'default'.
+        if (window._tgInitDone) {
+            sendLaunchReportOnce();
+        } else if (typeof window.onTgReady === 'function') {
+            window.onTgReady(sendLaunchReportOnce);
+            // Резерв: если SDK Telegram так и не загрузился (недоступен/заблокирован),
+            // через 6 секунд всё равно отправляем анонимный отчёт, чтобы запуск
+            // не потерялся совсем.
+            setTimeout(sendLaunchReportOnce, 6000);
+        } else {
+            sendLaunchReportOnce();
+        }
     }
 })();

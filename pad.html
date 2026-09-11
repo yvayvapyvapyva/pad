@@ -8,6 +8,11 @@
         // чтобы при блокировке/недоступности telegram.org страница
         // не зависала на десятки секунд (синхронный <script> блокирует рендер).
         window._tgInitDone = false;
+        window._tgReadyCbs = [];
+        window.onTgReady = function (cb) {
+            if (window._tgInitDone) { try { cb(); } catch (e) {} }
+            else window._tgReadyCbs.push(cb);
+        };
         function _initTelegram() {
             if (window._tgInitDone) return;
             if (!(window.Telegram && window.Telegram.WebApp)) return;
@@ -30,6 +35,11 @@
             ['viewportChanged', 'contentSafeAreaChanged', 'safeAreaChanged'].forEach(function (ev) {
                 if (typeof wa.onEvent === 'function') wa.onEvent(ev, applyTgInsets);
             });
+            var cbs = window._tgReadyCbs;
+            window._tgReadyCbs = [];
+            for (var i = 0; i < cbs.length; i++) {
+                try { cbs[i](); } catch (e) {}
+            }
         }
         (function () {
             var s = document.createElement('script');
@@ -2402,9 +2412,16 @@ function initCustomPinchRotate() {
 
     function handleStartParam() {
         try {
+            const urlParam = new URLSearchParams(location.search).get('startapp');
             const wa = window.Telegram && window.Telegram.WebApp;
-            const param = (wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param)
-                || new URLSearchParams(location.search).get('startapp');
+            const tgParam = (wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param) || null;
+            // В WebView startapp лежит в initDataUnsafe.start_param, который появляется
+            // только после загрузки SDK Telegram. Если SDK ещё не готов — ждём его.
+            if (!tgParam && !urlParam && !window._tgInitDone && typeof window.onTgReady === 'function') {
+                window.onTgReady(handleStartParam);
+                return;
+            }
+            const param = tgParam || urlParam;
             if (!param) return;
             const decoded = b64urlDecode(param);
             if (!decoded) return;
