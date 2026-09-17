@@ -897,7 +897,17 @@
             + '.scene-io-opt.scene-io-share-copy:active{background:rgba(255,255,255,0.15);}';
         document.head.appendChild(css);
 
-        loadScenes();
+        function startLoadScenes() {
+            if (scenesLoading || scenesLoaded) return;
+            loadScenes();
+        }
+        if (window._tgInitDone) {
+            startLoadScenes();
+        } else if (typeof window.onTgReady === 'function') {
+            window.onTgReady(startLoadScenes);
+        } else {
+            startLoadScenes();
+        }
     }
 
     if (document.readyState === 'loading') {
