@@ -690,9 +690,13 @@
         if (btn) btn.classList.add('active');
 
         refreshManager();
-        if (scenesLoading) {
-            // Первая загрузка при старте ещё идёт — loadScenes сам перерисует
-            // список, когда закончит, через refreshManager.
+        if (!scenesLoaded) {
+            // Список ещё ни разу не загружался (например, SDK Telegram не
+            // инициализировался в обычном браузере) — грузим сейчас, иначе
+            // шторка покажет ложное «Нет ни одной сцены». Если загрузка уже
+            // идёт, loadScenes не запустит вторую и сам перерисует список
+            // по завершении через refreshManager.
+            loadScenes();
         }
     }
 
@@ -905,6 +909,11 @@
             startLoadScenes();
         } else if (typeof window.onTgReady === 'function') {
             window.onTgReady(startLoadScenes);
+            // Резерв: если SDK Telegram так и не загрузился (открыто в обычном
+            // браузере, telegram.org недоступен/заблокирован), всё равно загружаем
+            // список сцен с текущими кредами (вне Telegram это default-пользователь).
+            // Иначе загрузка списка на старте навсегда остаётся невыполненной.
+            setTimeout(startLoadScenes, 6000);
         } else {
             startLoadScenes();
         }
