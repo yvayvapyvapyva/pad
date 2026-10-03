@@ -51,6 +51,25 @@
     // Telegram-контекст: user_id и init_data (подписанные данные для проверки на сервере)
     // ID по умолчанию для работы вне Telegram (делёжка/обычный запуск).
     const DEFAULT_USER_ID = 'default';
+const SESSION_PASSWORD_KEY = 'pad_default_password';
+
+    function getCachedPassword() {
+        try {
+            return sessionStorage.getItem(SESSION_PASSWORD_KEY);
+        } catch (e) { return null; }
+    }
+
+    function setCachedPassword(pwd) {
+        try {
+            sessionStorage.setItem(SESSION_PASSWORD_KEY, pwd);
+        } catch (e) {}
+    }
+
+    function clearCachedPassword() {
+        try {
+            sessionStorage.removeItem(SESSION_PASSWORD_KEY);
+        } catch (e) {}
+    }
 
     function tgCreds() {
         const wa = window.Telegram && window.Telegram.WebApp;
@@ -92,12 +111,108 @@
         return String(name).replace(/[\\/:*?"<>|]/g, '_').trim();
     }
 
+    function isDefaultUser() {
+        const creds = tgCreds();
+        return creds.user_id === DEFAULT_USER_ID;
+    }
+
+    // Обёртка: сначала пароль с проверкой на бэкенде, потом действие
+    async function withPasswordGate({ title, message, okText, onReady }) {
+        const cached = getCachedPassword();
+        if (cached) {
+            onReady(cached);
+            return;
+        }
+
+        const wrap = document.createElement('div');
+        wrap.className = 'scene-io-modal scene-io-modal-save scene-io-center';
+        const box = document.createElement('div');
+        box.className = 'scene-io-box';
+
+        const header = document.createElement('div');
+        header.className = 'scene-io-header';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'scene-io-close';
+        closeBtn.innerHTML = '&#10005;';
+        closeBtn.addEventListener('click', () => closeM(wrap));
+        const headerTitle = document.createElement('div');
+        headerTitle.className = 'scene-io-header-title';
+        headerTitle.textContent = title;
+        header.appendChild(closeBtn);
+        header.appendChild(headerTitle);
+
+        const msg = document.createElement('div');
+        msg.className = 'scene-io-confirm-msg';
+        msg.textContent = message;
+
+        const input = document.createElement('input');
+        input.type = 'password';
+        input.className = 'scene-io-input';
+        input.placeholder = 'Введите пароль';
+        input.spellcheck = false;
+        input.autocomplete = 'current-password';
+
+        const ok = document.createElement('button');
+        ok.className = 'scene-io-opt';
+        ok.textContent = okText || 'Продолжить';
+
+        const status = document.createElement('div');
+        status.className = 'scene-io-status';
+
+        box.appendChild(header);
+        box.appendChild(msg);
+        box.appendChild(input);
+        box.appendChild(ok);
+        box.appendChild(status);
+        wrap.appendChild(box);
+        wrap.addEventListener('click', e => { if (e.target === wrap) closeM(wrap); });
+        document.body.appendChild(wrap);
+        requestAnimationFrame(() => {
+            wrap.classList.add('visible');
+            input.focus();
+        });
+
+        const submit = async () => {
+            const val = input.value;
+            if (!val) { status.textContent = 'Введите пароль'; return; }
+            ok.disabled = true;
+            status.textContent = 'Проверка…';
+            status.classList.add('busy');
+            try {
+                // Проверяем пароль на бэкенде
+                await api('POST', { body: { name: '__verify_password__', password: val } });
+                // Успех — кэшируем и переходим к действию
+                setCachedPassword(val);
+                closeM(wrap);
+                onReady(val);
+            } catch (e) {
+                ok.disabled = false;
+                status.classList.remove('busy');
+                status.textContent = e.message.includes('Неверный пароль') ? 'Неверный пароль' : 'Ошибка: ' + e.message;
+            }
+        };
+
+        ok.addEventListener('click', submit);
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        });
+    }
+
     async function api(method, { body, query } = {}) {
         const creds = tgCreds();
         // Для GET/DELETE/PUT передаём user_id и init_data в query-строке
         query = Object.assign({}, query || {});
         if (creds.user_id && query.user_id == null) query.user_id = creds.user_id;
         if (creds.init_data && query.initData == null) query.initData = creds.init_data;
+        
+        // Автоматически подставляем кэшированный пароль для дефолтного пользователя
+        if (creds.user_id === DEFAULT_USER_ID && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
+            const cachedPwd = getCachedPassword();
+            if (cachedPwd && body && !body.password) {
+                body = Object.assign({}, body, { password: cachedPwd });
+            }
+        }
+        
         let url = API_URL;
         if (query && Object.keys(query).length) {
             const qs = Object.keys(query)
@@ -115,7 +230,17 @@
         }
         const resp = await fetch(url, opts);
         const json = await resp.json().catch(() => ({}));
-        if (!resp.ok || json.ok === false) throw new Error(json.error || ('Ошибка ' + resp.status));
+        if (!resp.ok || json.ok === false) {
+            const errMsg = json.error || ('Ошибка ' + resp.status);
+            const isWrongPwd = errMsg.includes('Неверный пароль');
+            if (isWrongPwd && creds.user_id === DEFAULT_USER_ID) {
+                clearCachedPassword();
+                const err = new Error(errMsg);
+                err.isWrongPassword = true;
+                throw err;
+            }
+            throw new Error(errMsg);
+        }
         return json;
     }
 
@@ -377,74 +502,89 @@
 
     // ---- Сохранение (интерактив: ввод имени) ----
     function saveWithName({ prefill, callback }) {
-        const wrap = document.createElement('div');
-        wrap.className = 'scene-io-modal scene-io-modal-save scene-io-center';
-        const box = document.createElement('div');
-        box.className = 'scene-io-box';
+        const doShowSaveDialog = (password) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'scene-io-modal scene-io-modal-save scene-io-center';
+            const box = document.createElement('div');
+            box.className = 'scene-io-box';
 
-        const header = document.createElement('div');
-        header.className = 'scene-io-header';
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'scene-io-close';
-        closeBtn.innerHTML = '&#10005;';
-        closeBtn.addEventListener('click', () => closeM(wrap));
-        const headerTitle = document.createElement('div');
-        headerTitle.className = 'scene-io-header-title';
-        headerTitle.textContent = 'Сохранить сцену';
-        header.appendChild(closeBtn);
-        header.appendChild(headerTitle);
+            const header = document.createElement('div');
+            header.className = 'scene-io-header';
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'scene-io-close';
+            closeBtn.innerHTML = '&#10005;';
+            closeBtn.addEventListener('click', () => closeM(wrap));
+            const headerTitle = document.createElement('div');
+            headerTitle.className = 'scene-io-header-title';
+            headerTitle.textContent = 'Сохранить сцену';
+            header.appendChild(closeBtn);
+            header.appendChild(headerTitle);
 
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.className = 'scene-io-input';
-        nameInput.value = prefill || '';
-        nameInput.placeholder = 'Имя сцены';
-        nameInput.spellcheck = false;
-        nameInput.autocomplete = 'off';
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.className = 'scene-io-input';
+            nameInput.value = prefill || '';
+            nameInput.placeholder = 'Имя сцены';
+            nameInput.spellcheck = false;
+            nameInput.autocomplete = 'off';
 
-        const confirm = document.createElement('button');
-        confirm.className = 'scene-io-opt scene-io-primary';
-        confirm.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить</span>';
+            const confirm = document.createElement('button');
+            confirm.className = 'scene-io-opt scene-io-primary';
+            confirm.innerHTML = '<span class="scene-io-opt-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 3h14v2H5v-2z"/></svg></span><span>Сохранить</span>';
 
-        const status = document.createElement('div');
-        status.className = 'scene-io-status';
+            const status = document.createElement('div');
+            status.className = 'scene-io-status';
 
-        box.appendChild(header);
-        box.appendChild(nameInput);
-        box.appendChild(confirm);
-        box.appendChild(status);
-        wrap.appendChild(box);
-        wrap.addEventListener('click', e => { if (e.target === wrap) { closeM(wrap); } });
-        document.body.appendChild(wrap);
-        attachSheetDrag(wrap);
-        requestAnimationFrame(() => {
-            wrap.classList.add('visible');
-            nameInput.focus();
-            if (nameInput.value) nameInput.select();
-        });
+            box.appendChild(header);
+            box.appendChild(nameInput);
+            box.appendChild(confirm);
+            box.appendChild(status);
+            wrap.appendChild(box);
+            wrap.addEventListener('click', e => { if (e.target === wrap) { closeM(wrap); } });
+            document.body.appendChild(wrap);
+            attachSheetDrag(wrap);
+            requestAnimationFrame(() => {
+                wrap.classList.add('visible');
+                nameInput.focus();
+                if (nameInput.value) nameInput.select();
+            });
 
-        confirm.addEventListener('click', async () => {
-            const name = sanitizeName(nameInput.value);
-            if (!name) { status.textContent = 'Введите имя сцены'; return; }
-            confirm.disabled = true;
-            status.textContent = 'Сохранение…';
-            status.classList.add('busy');
-            try {
-                await api('POST', { body: { name: name, data: collectState() } });
-                status.textContent = 'Сохранено ✓';
-                status.classList.remove('busy');
-                status.classList.add('ok');
-                closeM(wrap);
-                if (callback) callback(name);
-            } catch (e) {
-                status.textContent = 'Ошибка: ' + e.message;
-                status.classList.remove('busy');
-                confirm.disabled = false;
-            }
-        });
-        nameInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { e.preventDefault(); confirm.click(); }
-        });
+            confirm.addEventListener('click', async () => {
+                const name = sanitizeName(nameInput.value);
+                if (!name) { status.textContent = 'Введите имя сцены'; return; }
+                confirm.disabled = true;
+                status.textContent = 'Сохранение…';
+                status.classList.add('busy');
+                try {
+                    const body = { name: name, data: collectState() };
+                    if (isDefaultUser()) body.password = password;
+                    await api('POST', { body });
+                    status.textContent = 'Сохранено ✓';
+                    status.classList.remove('busy');
+                    status.classList.add('ok');
+                    closeM(wrap);
+                    if (callback) callback(name);
+                } catch (e) {
+                    status.textContent = 'Ошибка: ' + e.message;
+                    status.classList.remove('busy');
+                    confirm.disabled = false;
+                }
+            });
+            nameInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); confirm.click(); }
+            });
+        };
+
+        if (isDefaultUser()) {
+            withPasswordGate({
+                title: 'Сохранить сцену',
+                message: 'Введите пароль для подтверждения:',
+                okText: 'Продолжить',
+                onReady: doShowSaveDialog
+            });
+        } else {
+            doShowSaveDialog(null);
+        }
     }
 
     // Сохранить в активную сцену (перезапись) или создать новую
@@ -734,32 +874,162 @@
     }
 
     async function renameScene(scene, statusEl) {
-        promptBox({
-            title: 'Переименовать сцену',
-            label: 'Новое имя',
-            value: scene.name,
-            placeholder: 'Новое имя сцены',
-            okText: 'Переименовать',
-            onSubmit: async (newName, wrap) => {
-                await api('PUT', { body: { name: newName, from: scene.name } });
-                if (activeSceneName === scene.name) activeSceneName = newName;
-                closeM(wrap);
-                reloadScenes();
-            }
-        });
+        const doRename = (password) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'scene-io-modal scene-io-modal-save scene-io-center';
+            const box = document.createElement('div');
+            box.className = 'scene-io-box';
+
+            const header = document.createElement('div');
+            header.className = 'scene-io-header';
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'scene-io-close';
+            closeBtn.innerHTML = '&#10005;';
+            closeBtn.addEventListener('click', () => closeM(wrap));
+            const headerTitle = document.createElement('div');
+            headerTitle.className = 'scene-io-header-title';
+            headerTitle.textContent = 'Переименовать сцену';
+            header.appendChild(closeBtn);
+            header.appendChild(headerTitle);
+
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.className = 'scene-io-input';
+            nameInput.value = scene.name;
+            nameInput.placeholder = 'Новое имя сцены';
+            nameInput.spellcheck = false;
+            nameInput.autocomplete = 'off';
+
+            const ok = document.createElement('button');
+            ok.className = 'scene-io-opt';
+            ok.textContent = 'Переименовать';
+
+            const status = document.createElement('div');
+            status.className = 'scene-io-status';
+
+            box.appendChild(header);
+            box.appendChild(nameInput);
+            box.appendChild(ok);
+            box.appendChild(status);
+            wrap.appendChild(box);
+            wrap.addEventListener('click', e => { if (e.target === wrap) closeM(wrap); });
+            document.body.appendChild(wrap);
+            requestAnimationFrame(() => { wrap.classList.add('visible'); nameInput.focus(); nameInput.select(); });
+
+            const submit = async () => {
+                const newName = sanitizeName(nameInput.value);
+                if (!newName) { status.textContent = 'Введите имя'; return; }
+                ok.disabled = true;
+                try {
+                    await api('PUT', { body: { name: newName, from: scene.name, password } });
+                    if (activeSceneName === scene.name) activeSceneName = newName;
+                    closeM(wrap);
+                    reloadScenes();
+                } catch (e) {
+                    status.textContent = 'Ошибка: ' + e.message;
+                    ok.disabled = false;
+                }
+            };
+            ok.addEventListener('click', submit);
+            nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+        };
+
+        if (isDefaultUser()) {
+            withPasswordGate({
+                title: 'Переименовать сцену',
+                message: 'Введите пароль для подтверждения:',
+                okText: 'Продолжить',
+                onReady: doRename
+            });
+        } else {
+            promptBox({
+                title: 'Переименовать сцену',
+                label: 'Новое имя',
+                value: scene.name,
+                placeholder: 'Новое имя сцены',
+                okText: 'Переименовать',
+                onSubmit: async (newName, wrap) => {
+                    await api('PUT', { body: { name: newName, from: scene.name } });
+                    if (activeSceneName === scene.name) activeSceneName = newName;
+                    closeM(wrap);
+                    reloadScenes();
+                }
+            });
+        }
     }
 
     async function deleteScene(scene, statusEl) {
-        confirmBox({
-            title: 'Удалить сцену',
-            message: 'Удалить сцену «' + scene.name + '» без возможности восстановления?',
-            okText: 'Удалить',
-            onOk: async () => {
-                await api('DELETE', { query: { name: scene.name } });
-                if (activeSceneName === scene.name) activeSceneName = null;
-                reloadScenes();
-            }
-        });
+        const doDelete = (password) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'scene-io-modal scene-io-modal-save scene-io-center';
+            const box = document.createElement('div');
+            box.className = 'scene-io-box';
+
+            const header = document.createElement('div');
+            header.className = 'scene-io-header';
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'scene-io-close';
+            closeBtn.innerHTML = '&#10005;';
+            closeBtn.addEventListener('click', () => closeM(wrap));
+            const headerTitle = document.createElement('div');
+            headerTitle.className = 'scene-io-header-title';
+            headerTitle.textContent = 'Удалить сцену';
+            header.appendChild(closeBtn);
+            header.appendChild(headerTitle);
+
+            const msg = document.createElement('div');
+            msg.className = 'scene-io-confirm-msg';
+            msg.textContent = 'Удалить сцену «' + scene.name + '» без возможности восстановления?';
+
+            const ok = document.createElement('button');
+            ok.className = 'scene-io-opt scene-io-danger';
+            ok.textContent = 'Удалить';
+
+            const status = document.createElement('div');
+            status.className = 'scene-io-status';
+
+            box.appendChild(header);
+            box.appendChild(msg);
+            box.appendChild(ok);
+            box.appendChild(status);
+            wrap.appendChild(box);
+            wrap.addEventListener('click', e => { if (e.target === wrap) closeM(wrap); });
+            document.body.appendChild(wrap);
+            requestAnimationFrame(() => wrap.classList.add('visible'));
+
+            ok.addEventListener('click', async () => {
+                ok.disabled = true;
+                try {
+                    await api('DELETE', { query: { name: scene.name }, body: { password } });
+                    if (activeSceneName === scene.name) activeSceneName = null;
+                    closeM(wrap);
+                    reloadScenes();
+                } catch (e) {
+                    ok.disabled = false;
+                    status.textContent = 'Ошибка: ' + e.message;
+                }
+            });
+        };
+
+        if (isDefaultUser()) {
+            withPasswordGate({
+                title: 'Удалить сцену',
+                message: 'Введите пароль для подтверждения:',
+                okText: 'Продолжить',
+                onReady: doDelete
+            });
+        } else {
+            confirmBox({
+                title: 'Удалить сцену',
+                message: 'Удалить сцену «' + scene.name + '» без возможности восстановления?',
+                okText: 'Удалить',
+                onOk: async () => {
+                    await api('DELETE', { query: { name: scene.name } });
+                    if (activeSceneName === scene.name) activeSceneName = null;
+                    reloadScenes();
+                }
+            });
+        }
     }
 
     // Показать состояние загрузки в открытой шторке (если она есть)

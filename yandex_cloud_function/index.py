@@ -9,6 +9,7 @@
 #        YDB_ENDPOINT        — например grpcs://ydb.serverless.yandexcloud.net:2135
 #        YDB_DATABASE        — например /ru-central1/b1g.../etn...
 #        TELEGRAM_BOT_TOKEN  — (рекомендуется) токен бота для проверки init_data.
+#        DEFAULT_PASSWORD    — пароль для дефолтного пользователя (браузер), plaintext.
 #
 # Безопасность: frontend шлёт user_id и init_data. Если задан TELEGRAM_BOT_TOKEN,
 # сервер проверяет подпись init_data и берёт user_id из неё (надёжно). Иначе
@@ -23,8 +24,6 @@
 #   GET /             — список сцен -> {"ok": true, "scenes": [{"name": "...", "savedAt": "..."}]}
 #   DELETE /?name=... — удалить сцену -> {"ok": true}
 
-import hashlib
-import hmac
 import json
 import os
 import urllib.parse
@@ -32,6 +31,8 @@ import urllib.request
 
 import ydb
 import ydb.credentials
+
+DEFAULT_USER_ID = "default"
 
 
 def _scene_path() -> str:
@@ -93,6 +94,18 @@ def _ascii(v) -> str:
     if isinstance(v, bytes):
         return v.decode("utf-8")
     return str(v)
+
+
+def _verify_default_password(body: dict) -> bool:
+    """Простая проверка пароля для дефолтного пользователя.
+    Пароль хранится в переменной окружения DEFAULT_PASSWORD (plaintext).
+    Клиент присылает пароль в поле 'password'.
+    """
+    expected = os.environ.get("DEFAULT_PASSWORD")
+    if not expected:
+        return False
+    provided = body.get("password") if isinstance(body, dict) else None
+    return provided == expected
 
 
 def _upsert_scene(session: ydb.Session, user_id: str, name: str, data) -> str:
@@ -314,12 +327,22 @@ def handler(event, context):
 
 
 def _dispatch(session, method, user_id, name, body, owner_user_id=None):
+    is_default = (user_id == "default" or user_id == DEFAULT_USER_ID)
+
+    # Отдельный эндпоинт для проверки пароля (без побочных эффектов)
+    if method == "POST" and name == "__verify_password__":
+        if is_default and not _verify_default_password(body):
+            raise PermissionError("Неверный пароль")
+        return {"ok": True}
+
     if method == "POST":
         if not name:
             raise ValueError("Параметр 'name' обязателен")
         data = body.get("data") if isinstance(body, dict) else body
         if data is None:
             raise ValueError("Поле 'data' обязательно")
+        if is_default and not _verify_default_password(body):
+            raise PermissionError("Неверный пароль для сохранения сцены")
         saved = _upsert_scene(session, user_id, name, data)
         return {"ok": True, "name": saved}
 
@@ -340,12 +363,16 @@ def _dispatch(session, method, user_id, name, body, owner_user_id=None):
             old_name = body.get("from")
         if not old_name:
             raise ValueError("Параметр 'from' обязателен")
+        if is_default and not _verify_default_password(body):
+            raise PermissionError("Неверный пароль для редактирования сцены")
         renamed = _rename_scene(session, user_id, old_name, name)
         return {"ok": True, "name": renamed}
 
     if method == "DELETE":
         if not name:
             raise ValueError("Параметр 'name' обязателен")
+        if is_default and not _verify_default_password(body):
+            raise PermissionError("Неверный пароль для удаления сцены")
         _delete_scene(session, user_id, name)
         return {"ok": True, "name": name}
 
